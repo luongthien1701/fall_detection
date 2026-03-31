@@ -1,0 +1,8 @@
+WINDOW_SIZE = 25
+STEP_SIZE = 10
+
+ALERT_COOLDOWN = 5
+
+SERVICE_ACCOUNT_FILE = "service-account.json"
+PROJECT_ID = "device-streaming-79c92ab1"
+DEVICE_TOKEN = "duGSi465T56xmZlosYadYC:APA91bGMWkhzNz4yzKqGowePrQbuylXxZqd2khwpTHkLviMjf9HGQmnYSDluReYbarcwfg0Oc9vovvddg4fiLJQDsc1HoPZk2U0ZEFA8iZ3M5dpuAWUP_WM"

@@ -2,20 +2,32 @@ import asyncio
 import pandas as pd
 import joblib
 from collections import deque
-import http.client
-import urllib.parse
 import time
 import websockets
 from fastapi import FastAPI
 import uvicorn
+import requests
+from google.oauth2 import service_account
+from google.auth.transport.requests import Request
 
 # ===== CONFIG =====
 WINDOW_SIZE = 25
 STEP_SIZE = 10
 
-TELEGRAM_TOKEN = "YOUR_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+# ===== FCM CONFIG =====
+SERVICE_ACCOUNT_FILE = "service-account.json"
+PROJECT_ID = "device-streaming-79c92ab1"
+FCM_URL = f"https://fcm.googleapis.com/v1/projects/{PROJECT_ID}/messages:send"
 
+DEVICE_TOKEN = "YOUR_DEVICE_TOKEN"
+
+SCOPES = ["https://www.googleapis.com/auth/firebase.messaging"]
+
+credentials = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+)
+
+# ===== MODEL =====
 model = joblib.load("fall_model.pkl")
 
 queue = deque()
@@ -33,24 +45,44 @@ device_status = "offline"
 last_update = None
 history = []
 
-# ===== TELEGRAM =====
-def send_telegram(message):
-
-    conn = http.client.HTTPSConnection("api.telegram.org")
-
-    url = f"/bot{TELEGRAM_TOKEN}/sendMessage?" + urllib.parse.urlencode({
-        "chat_id": CHAT_ID,
-        "text": message
-    })
+# ===== FCM SEND =====
+def send_fcm(title, body_text):
 
     try:
-        conn.request("GET", url)
-        res = conn.getresponse()
-        print("Telegram:", res.status)
-    except Exception as e:
-        print("Telegram error:", e)
+        credentials.refresh(Request())
+        access_token = credentials.token
 
-# ===== feature extraction =====
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+
+        body = {
+            "message": {
+                "token": DEVICE_TOKEN,
+                "notification": {
+                    "title": title,
+                    "body": body_text
+                },
+                "android": {
+                    "priority": "HIGH"
+                },
+                "apns": {
+                    "headers": {
+                        "apns-priority": "10"
+                    }
+                }
+            }
+        }
+
+        response = requests.post(FCM_URL, headers=headers, json=body)
+
+        print("FCM:", response.status_code, response.text)
+
+    except Exception as e:
+        print("FCM error:", e)
+
+# ===== feature extraction ===== 
 def extract_features(df):
 
     feat = {}
@@ -85,7 +117,6 @@ async def handler(websocket):
             if len(row) < 7:
                 continue
 
-            # update trạng thái
             device_status = "online"
             last_update = time.time()
 
@@ -116,16 +147,16 @@ async def handler(websocket):
                         print("\n⚠️ FALL DETECTED\n")
 
                         message = f"""
-⚠️ FALL DETECTED
+FALL DETECTED
 Time: {time.ctime()}
 Accel: {row[0]:.2f}, {row[1]:.2f}, {row[2]:.2f}
-Gyro: {row[3]:.2f}, {row[4]:.2f}, {row[5]:.2f}
 Total_A: {row[6]:.2f}
 """
 
-                        send_telegram(message)
+                        # ===== SEND FCM =====
+                        send_fcm("⚠️ FALL DETECTED", message)
 
-                        # lưu lịch sử
+                        # lưu history
                         history.append({
                             "time": time.ctime(),
                             "accel": row[:3],

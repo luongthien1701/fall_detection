@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+websockets
+pandas
+joblib
+scikit-learn
+sqlalchemy
+passlib[bcrypt]
+requests
+google-auth
