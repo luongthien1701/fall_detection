@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -82,14 +84,15 @@ def extract_features(segments, label):
 
         features.append(feat)
 
+    pd.DataFrame(features).to_csv("features.csv", index=False)
     return pd.DataFrame(features)
 
 
 # ==============================
 # TRAIN DATA
 # ==============================
-fall_train = create_segments(load_data("fall_train.csv"))
-normal_train = create_segments(load_data("normal_train.csv"))
+fall_train = create_segments(load_data("dataset/fall_train.csv"))
+normal_train = create_segments(load_data("dataset/normal_train.csv"))
 
 print("Train fall segments:",len(fall_train))
 print("Train normal segments:",len(normal_train))
@@ -106,8 +109,8 @@ y_train = train_df["label"]
 # ==============================
 # TEST DATA
 # ==============================
-fall_test = create_segments(load_data("fall_test.csv"))
-normal_test = create_segments(load_data("normal_test.csv"))
+fall_test = create_segments(load_data("dataset/fall_test.csv"))
+normal_test = create_segments(load_data("dataset/normal_test.csv"))
 
 print("Test fall segments:",len(fall_test))
 print("Test normal segments:",len(normal_test))
@@ -131,7 +134,6 @@ model = RandomForestClassifier(
     min_samples_leaf=2,
     class_weight="balanced",
     random_state=42
-
 )
 
 model.fit(X_train,y_train)
@@ -154,6 +156,6 @@ print(classification_report(y_test,pred))
 # ==============================
 # SAVE MODEL
 # ==============================
-joblib.dump(model,"fall_model.pkl")
-
-print("\nModel saved: fall_model.pkl")
+model_path = os.path.join(os.path.dirname(__file__), "falldetact_model.pkl")
+joblib.dump(model, model_path)
+print(f"Model saved: {model_path}")

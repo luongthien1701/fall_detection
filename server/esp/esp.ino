@@ -1,22 +1,37 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <MPU6050_tockn.h>
-#include <WebSocketsClient.h>
-#include <WiFiManager.h>  // thêm
+#include <WiFiManager.h>
+#include <PubSubClient.h>
 
-WebSocketsClient webSocket;
+// ===== MQTT =====
+const char* mqtt_server = "20.19.56.30";
+const int mqtt_port = 1883;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// ===== MPU =====
 MPU6050 mpu6050(Wire);
 WiFiManager wm;
 
-void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
-  switch(type) {
-    case WStype_CONNECTED:
-      Serial.println("Connected to server");
-      break;
+// ===== timing =====
+unsigned long lastSend = 0;
+const int sendInterval = 200;
 
-    case WStype_DISCONNECTED:
-      Serial.println("Disconnected");
-      break;
+// ===== reconnect MQTT =====
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Connecting MQTT...");
+    
+    if (client.connect("ESP32_Client")) {
+      Serial.println("connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" retry in 2s");
+      delay(2000);
+    }
   }
 }
 
@@ -24,52 +39,56 @@ void setup() {
   Serial.begin(115200);
 
   // ===== MPU =====
-  Wire.begin();
+  Wire.begin(21, 22);
   mpu6050.begin();
   mpu6050.calcGyroOffsets(true);
 
-  // ===== WiFiManager =====
-  bool res;
-  res = wm.autoConnect("ESP32_Config"); 
-  // tên WiFi AP khi chưa connect được
-
-  if(!res) {
-    Serial.println("Failed to connect");
+  // ===== WiFi =====
+  if (!wm.autoConnect("ESP32_Config")) {
+    Serial.println("WiFi Failed");
     ESP.restart();
   }
 
   Serial.println("WiFi connected");
-  Serial.print("IP: ");
   Serial.println(WiFi.localIP());
 
-  // ===== WebSocket =====
-  webSocket.begin("192.168.196.183", 8181, "/");
-  webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000);
+  // ===== MQTT =====
+  client.setServer(mqtt_server, mqtt_port);
+
+  WiFi.setSleep(false); // 🔥 giảm mất WiFi
 }
 
 void loop() {
-  webSocket.loop();
+  // ===== reconnect MQTT =====
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
 
-  // đọc MPU6050
-  mpu6050.update();
+  // ===== gửi dữ liệu =====
+  if (millis() - lastSend > sendInterval) {
+    lastSend = millis();
 
-  float ax = mpu6050.getAccX();
-  float ay = mpu6050.getAccY();
-  float az = mpu6050.getAccZ();
+    mpu6050.update();
 
-  float gx = mpu6050.getGyroX();
-  float gy = mpu6050.getGyroY();
-  float gz = mpu6050.getGyroZ();
+    float ax = mpu6050.getAccX();
+    float ay = mpu6050.getAccY();
+    float az = mpu6050.getAccZ();
 
-  float A = sqrt(ax*ax + ay*ay + az*az);
+    float gx = mpu6050.getGyroX();
+    float gy = mpu6050.getGyroY();
+    float gz = mpu6050.getGyroZ();
 
-  String data = String(ax) + "," + String(ay) + "," + String(az) + "," +
-                String(gx) + "," + String(gy) + "," +
-                String(gz) + "," + String(A);
+    float A = sqrt(ax*ax + ay*ay + az*az);
 
-  webSocket.sendTXT(data);
-  Serial.println(data);
+    // 🔥 dùng char thay vì String (tránh crash)
+    char data[120];
+    sprintf(data, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+            ax, ay, az, gx, gy, gz, A);
 
-  delay(100);
+    // ===== publish =====
+    client.publish("esp32/data", data);
+
+    Serial.println(data);
+  }
 }

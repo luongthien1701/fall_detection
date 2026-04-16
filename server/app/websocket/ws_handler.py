@@ -41,8 +41,6 @@ async def handler(websocket):
 
                     if now - state.last_alert_time > ALERT_COOLDOWN:
 
-                        print("⚠️ FALL DETECTED")
-
                         db = SessionLocal()
                         users = db.query(User).all()
 

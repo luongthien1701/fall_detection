@@ -1,27 +1,19 @@
-import asyncio
-import websockets
 import uvicorn
 from fastapi import FastAPI
 from app.api.routes import router
-from app.websocket.ws_handler import handler
+from app.db.database import Base, engine
+
+from app.mqtt.mqtt_handle import start_mqtt, handler
 
 app = FastAPI()
+
+Base.metadata.create_all(bind=engine)
 app.include_router(router)
 
-async def start_ws():
-    async with websockets.serve(handler, "0.0.0.0", 8181):
-        await asyncio.Future()
-
-async def start_api():
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000)
-    server = uvicorn.Server(config)
-    await server.serve()
-
-async def main():
-    await asyncio.gather(
-        start_ws(),
-        start_api()
-    )
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # 🚀 start MQTT
+    start_mqtt(handler)
+
+    # 🚀 start API
+    uvicorn.run(app, host="0.0.0.0", port=8000)

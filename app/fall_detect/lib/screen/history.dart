@@ -12,16 +12,10 @@ class _HistoryWidgetState extends State<HistoryWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Center(
-          child: Column(
-            children: [
-              SizedBox(height: 20),
-              const Text(
-                'Lịch sử sự kiện',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
+        centerTitle: true,
+        title: const Text(
+          'Lịch sử sự kiện',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
       ),
       body: Center(

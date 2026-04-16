@@ -1,5 +1,6 @@
-import 'package:fall_detect/screen/history.dart';
+import 'package:fall_detect/provider/auth_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class HomeWidget extends StatefulWidget {
   const HomeWidget({super.key});
@@ -9,37 +10,34 @@ class HomeWidget extends StatefulWidget {
 }
 
 class _HomeWidgetState extends State<HomeWidget> {
+
+  @override
+  void dispose() {
+    super.dispose();
+    context.read<AuthProvider>().logout();
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Center(
-          child: Column(
-            children: [
-              SizedBox(height: 20),
-              const Text(
-                'Fall Detection App',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+        title: const Text(
+          'Fall Detection App',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 15.0, top: 20),
-            child: IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () {
-                Navigator.pushNamed(context, '/hazardous');
-              },
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.pushNamed(context, '/hazardous');
+            },
           ),
         ],
       ),
       body: Center(
         child: Column(
           children: [
-            SizedBox(height: 50),
             Container(
               width: 350,
               height: 150,

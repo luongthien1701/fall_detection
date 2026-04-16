@@ -5,9 +5,10 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
+    firstname = Column(String)
     email = Column(String, unique=True)
     password = Column(String)
+    phone = Column(String)
     fcm_token = Column(String)
 
 

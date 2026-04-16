@@ -1,7 +1,7 @@
 import requests
 from google.oauth2 import service_account
 from google.auth.transport.requests import Request
-from app.config import SERVICE_ACCOUNT_FILE, PROJECT_ID, DEVICE_TOKEN
+from app.config import SERVICE_ACCOUNT_FILE, PROJECT_ID
 
 # ===== CONFIG =====
 FCM_URL = f"https://fcm.googleapis.com/v1/projects/{PROJECT_ID}/messages:send"
@@ -13,7 +13,7 @@ credentials = service_account.Credentials.from_service_account_file(
     scopes=SCOPES
 )
 
-def send_fcm(title, body_text):
+def send_fcm(user_token, body_text):
     try:
         # refresh token
         credentials.refresh(Request())
@@ -26,9 +26,9 @@ def send_fcm(title, body_text):
 
         payload = {
             "message": {
-                "token": DEVICE_TOKEN,
+                "token": user_token,
                 "notification": {
-                    "title": title,
+                    "title": "Alert",
                     "body": body_text
                 },
                 "android": {
