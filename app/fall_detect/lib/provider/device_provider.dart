@@ -25,4 +25,13 @@ class DeviceProvider extends ChangeNotifier {
     _history = await DeviceService().getHistoryDevice();
     notifyListeners();
   }
+
+  Future<bool> controlDevice(String command) async {
+    try {
+      return await DeviceService().controlDevice(command);
+    } catch (e) {
+      print("Error controlling device: $e");
+      return false;
+    }
+  }
 }

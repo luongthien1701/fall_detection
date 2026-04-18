@@ -77,7 +77,7 @@ def start_mqtt(handler_func):
 
     def on_connect(client, userdata, flags, rc):
         print("MQTT connected:", rc)
-        client.subscribe("esp32/fall_detection/data")
+        client.subscribe("esp32/data")
 
     def on_message(client, userdata, msg):
         data = msg.payload.decode()
@@ -88,3 +88,10 @@ def start_mqtt(handler_func):
 
     mqtt_client.connect(BROKER, PORT, 60)
     mqtt_client.loop_start()
+# ===== PUBLISH CONTROL =====
+def publish_control(command):
+    if mqtt_client:
+        mqtt_client.publish("esp32/device/control", command)
+        print(f"Published control command: {command}")
+    else:
+        print("MQTT client not connected")
