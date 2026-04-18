@@ -10,7 +10,7 @@ from app.services.fcm import send_fcm
 from app.db.database import SessionLocal
 from app.db.model import User, FallEvent
 
-
+mqtt_client = None
 # ===== HANDLER (GIỐNG WS) =====
 def handler(data):
     try:
@@ -19,7 +19,10 @@ def handler(data):
         if len(row) < 7:
             return
 
-        state.device_status = "online"
+        if state.device_status != "online":
+            state.device_status = "online"
+            mqtt_client.publish("esp32/device/status", "online")
+
         state.last_update = time.time()
 
         values = [
@@ -69,7 +72,8 @@ def handler(data):
 
 # ===== MQTT WRAPPER (ẨN ĐI) =====
 def start_mqtt(handler_func):
-    client = mqtt.Client()
+    global mqtt_client
+    mqtt_client = mqtt.Client()
 
     def on_connect(client, userdata, flags, rc):
         print("MQTT connected:", rc)
@@ -79,8 +83,8 @@ def start_mqtt(handler_func):
         data = msg.payload.decode()
         handler_func(data)   # 👈 gọi handler giống WS
 
-    client.on_connect = on_connect
-    client.on_message = on_message
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
 
-    client.connect(BROKER, PORT, 60)
-    client.loop_start()
+    mqtt_client.connect(BROKER, PORT, 60)
+    mqtt_client.loop_start()

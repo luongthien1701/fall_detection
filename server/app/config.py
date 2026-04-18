@@ -9,3 +9,4 @@ PROJECT_ID = "device-streaming-79c92ab1"
 
 BROKER = "broker.hivemq.com"
 PORT = 1883
+OFFLINE_TIMEOUT = 5

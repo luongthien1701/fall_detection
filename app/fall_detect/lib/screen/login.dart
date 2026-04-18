@@ -148,7 +148,7 @@ class _LoginWidgetState extends State<LoginWidget> {
                                     SnackBar(content: Text(mess.toString())),
                                   );
                                   if (context.read<AuthProvider>().isLogin) {
-                                    Navigator.pushNamed(context, '/home');
+                                    Navigator.pushNamed(context, '/hub');
                                   }
                                 },
                                 child: Padding(
