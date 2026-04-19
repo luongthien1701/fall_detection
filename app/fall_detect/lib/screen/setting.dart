@@ -17,8 +17,10 @@ class _SettingWidgetState extends State<SettingWidget> {
   @override
   void initState() {
     super.initState();
-    loadvolume();
-    loadDeviceState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      loadvolume();
+      loadDeviceState();
+    });
   }
 
   @override
@@ -87,32 +89,47 @@ class _SettingWidgetState extends State<SettingWidget> {
                         "Bật/Tắt thiết bị",
                         style: TextStyle(fontSize: 16),
                       ),
-                      Switch(
-                        value: ison,
-                        activeColor: Colors.green,
-                        onChanged: (value) async {
-                          setState(() {
-                            ison = value;
-                          });
-                          final prefs = await SharedPreferences.getInstance();
-                          prefs.setBool('device_on', value);
-                          // Send command to server
-                          String command = value ? "on" : "off";
-                          bool success = await context
-                              .read<DeviceProvider>()
-                              .controlDevice(command);
-                          if (!success) {
-                            // Revert if failed
-                            setState(() {
-                              ison = !value;
-                            });
-                            prefs.setBool('device_on', ison);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Không thể điều khiển thiết bị"),
-                              ),
-                            );
-                          }
+                      Builder(
+                        builder: (context) {
+                          final deviceProvider = context
+                              .watch<DeviceProvider>();
+                          final deviceOnline =
+                              deviceProvider.device?.status == 'online';
+                          final switchValue = deviceOnline ? ison : false;
+
+                          return Switch(
+                            value: switchValue,
+                            activeColor: Colors.green,
+                            onChanged: deviceOnline
+                                ? (value) async {
+                                    setState(() {
+                                      ison = value;
+                                    });
+                                    final prefs =
+                                        await SharedPreferences.getInstance();
+                                    prefs.setBool('device_on', value);
+                                    String command = value ? 'on' : 'off';
+                                    bool success = await context
+                                        .read<DeviceProvider>()
+                                        .controlDevice(command);
+                                    if (!success) {
+                                      setState(() {
+                                        ison = !value;
+                                      });
+                                      prefs.setBool('device_on', ison);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            "Không thể điều khiển thiết bị",
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                : null,
+                          );
                         },
                       ),
                     ],
@@ -216,6 +233,7 @@ class _SettingWidgetState extends State<SettingWidget> {
 
   void loadvolume() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       volume = prefs.getDouble('volume') ?? 70;
     });
@@ -223,6 +241,7 @@ class _SettingWidgetState extends State<SettingWidget> {
 
   void loadDeviceState() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       ison = prefs.getBool('device_on') ?? true;
     });
