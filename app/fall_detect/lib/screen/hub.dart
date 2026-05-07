@@ -21,9 +21,10 @@ class _HubWidgetState extends State<HubWidget> {
   @override
   void initState() {
     super.initState();
-    _connectMqtt();
-
-    loaddata();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _connectMqtt();
+      loaddata();
+    });
   }
 
   void _connectMqtt() async {
