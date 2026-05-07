@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db.model import User
 from app.services.auth_service import hash_password, verify_password
-
+from app.mqtt.mqtt_handle import publish_control
 
 router = APIRouter()
 
@@ -91,3 +91,10 @@ def login(data: dict = Body(...), db: Session = Depends(get_db)):
         "message": "Login successful",
         "user_id": user.id
     }
+@router.post("/control")
+def control_device(command: str = Body(..., embed=True)):
+    if command in ["on", "off"]:
+        publish_control(command)
+        return {"success": True, "command": command}
+    else:
+        return {"success": False, "message": "Invalid command"}

@@ -1,7 +1,10 @@
 import 'package:fall_detect/provider/auth_provider.dart';
 import 'package:fall_detect/provider/device_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'package:fall_detect/provider/device_provider.dart';
+import 'package:fall_detect/provider/auth_provider.dart';
 
 class SettingWidget extends StatefulWidget {
   const SettingWidget({super.key});
@@ -12,12 +15,13 @@ class SettingWidget extends StatefulWidget {
 
 class _SettingWidgetState extends State<SettingWidget> {
   double volume = 70;
-
+  bool ison = true;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       loadvolume();
+      loadDeviceState();
     });
   }
 
@@ -90,25 +94,47 @@ class _SettingWidgetState extends State<SettingWidget> {
                         "Bật/Tắt thiết bị",
                         style: TextStyle(fontSize: 16),
                       ),
-                      Switch(
-                        value: deviceOnline, // ✅ chỉ dùng server state
-                        activeColor: Colors.green,
-                        onChanged: (value) async {
-                          String command = value ? 'on' : 'off';
+                      Builder(
+                        builder: (context) {
+                          final deviceProvider = context
+                              .watch<DeviceProvider>();
+                          final deviceOnline =
+                              deviceProvider.device?.status == 'online';
+                          final switchValue = deviceOnline ? ison : false;
 
-                          bool success = await context
-                              .read<DeviceProvider>()
-                              .controlDevice(command);
-
-                          if (!success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Không thể điều khiển thiết bị",
-                                ),
-                              ),
-                            );
-                          }
+                          return Switch(
+                            value: switchValue,
+                            activeColor: Colors.green,
+                            onChanged: deviceOnline
+                                ? (value) async {
+                                    setState(() {
+                                      ison = value;
+                                    });
+                                    final prefs =
+                                        await SharedPreferences.getInstance();
+                                    prefs.setBool('device_on', value);
+                                    String command = value ? 'on' : 'off';
+                                    bool success = await context
+                                        .read<DeviceProvider>()
+                                        .controlDevice(command);
+                                    if (!success) {
+                                      setState(() {
+                                        ison = !value;
+                                      });
+                                      prefs.setBool('device_on', ison);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            "Không thể điều khiển thiết bị",
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                : null,
+                          );
                         },
                       ),
                     ],
@@ -157,7 +183,7 @@ class _SettingWidgetState extends State<SettingWidget> {
     );
   }
 
-  /// UI helpers
+  /// Card chung
   Widget buildCard({required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -199,6 +225,7 @@ class _SettingWidgetState extends State<SettingWidget> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
+              // TODO: xử lý logout
               context.read<AuthProvider>().logout();
               Navigator.pushReplacementNamed(context, '/login');
             },
@@ -214,6 +241,14 @@ class _SettingWidgetState extends State<SettingWidget> {
     if (!mounted) return;
     setState(() {
       volume = prefs.getDouble('volume') ?? 70;
+    });
+  }
+
+  void loadDeviceState() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      ison = prefs.getBool('device_on') ?? true;
     });
   }
 }
