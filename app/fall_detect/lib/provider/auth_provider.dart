@@ -10,7 +10,7 @@ class AuthProvider extends ChangeNotifier {
   Future<String?> login(String email, String password, String fcmToken) async {
     Authservice authservice = Authservice();
     final result = await authservice.login(email, password, fcmToken);
-
+    debugPrint("Login result: $result");
     if (result["success"] == true) {
       _userId = result["user_id"];
       notifyListeners();
