@@ -3,8 +3,6 @@ import 'package:fall_detect/provider/device_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'package:fall_detect/provider/device_provider.dart';
-import 'package:fall_detect/provider/auth_provider.dart';
 
 class SettingWidget extends StatefulWidget {
   const SettingWidget({super.key});
@@ -27,9 +25,6 @@ class _SettingWidgetState extends State<SettingWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final deviceProvider = context.watch<DeviceProvider>();
-    final deviceOnline = deviceProvider.device?.status == 'online';
-
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 100,
@@ -227,6 +222,7 @@ class _SettingWidgetState extends State<SettingWidget> {
               Navigator.pop(context);
               // TODO: xử lý logout
               context.read<AuthProvider>().logout();
+              context.read<DeviceProvider>().setDeviceCode(null);
               Navigator.pushReplacementNamed(context, '/login');
             },
             child: const Text("Đăng xuất"),

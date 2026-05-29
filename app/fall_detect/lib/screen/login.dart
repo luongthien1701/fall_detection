@@ -134,21 +134,31 @@ class _LoginWidgetState extends State<LoginWidget> {
                                         ),
                                       ),
                                 ),
-                                onPressed: () async{
+                                onPressed: () async {
                                   final email = _emailController.text;
                                   final password = _passwordController.text;
-                                  final mess = await  context
+                                  final mess = await context
                                       .read<AuthProvider>()
                                       .login(
                                         email,
                                         password,
                                         context.read<FcmProvider>().token ?? "",
                                       );
+                                  if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(mess.toString())),
+                                    SnackBar(
+                                      content: Text(
+                                        mess ?? "Đăng nhập thành công",
+                                      ),
+                                    ),
                                   );
-                                  if (context.read<AuthProvider>().isLogin) {
-                                    Navigator.pushNamed(context, '/hub');
+                                  final authProvider = context
+                                      .read<AuthProvider>();
+                                  if (authProvider.isLogin) {
+                                    Navigator.pushReplacementNamed(
+                                      context,
+                                      '/hub',
+                                    );
                                   }
                                 },
                                 child: Padding(

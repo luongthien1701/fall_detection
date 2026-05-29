@@ -46,4 +46,19 @@ class Authservice {
 
     return data;
   }
+
+  Future<Map<String, dynamic>> connectDevice(
+    int userId,
+    String deviceCode,
+  ) async {
+    final response = await http.post(
+      Uri.parse('${Ip.ip}/api/device/connect'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"user_id": userId, "device_code": deviceCode}),
+    );
+
+    final data = jsonDecode(response.body);
+
+    return data;
+  }
 }

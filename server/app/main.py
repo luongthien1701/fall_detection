@@ -3,7 +3,7 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from app.api.routes import router
-from app.db.database import Base, engine
+from app.db.database import Base, engine, ensure_schema
 
 from app.mqtt.mqtt_handle import start_mqtt, handler
 from app.mqtt.worker import monitor_timeout
@@ -11,6 +11,7 @@ from app.mqtt.worker import monitor_timeout
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
+ensure_schema()
 app.include_router(router)
 
 

@@ -1,3 +1,4 @@
+import 'package:fall_detect/service/audioservice.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -20,6 +21,13 @@ class _HazardousWidgetState extends State<HazardousWidget> {
   Future<void> callFamily() async {
     final url = Uri(scheme: 'tel', path: '0332775136');
     await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // phát âm thanh cảnh báo
+    AudioService.playAlarm(50);
   }
 
   @override
@@ -120,7 +128,7 @@ class _HazardousWidgetState extends State<HazardousWidget> {
                         opacity: 0.5,
                         child: Text(
                           "Trượt để tắt cảnh báo",
-                          style: TextStyle(fontWeight: FontWeight.bold,),
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -147,6 +155,7 @@ class _HazardousWidgetState extends State<HazardousWidget> {
                         onChangeEnd: (value) {
                           if (value > 0.9) {
                             Navigator.pushNamed(context, '/hub');
+                            AudioService.stopAlarm();
                           } else {
                             setState(() {
                               slideValue = 0;
@@ -169,8 +178,10 @@ class _HazardousWidgetState extends State<HazardousWidget> {
                       },
                       onHorizontalDragEnd: (_) {
                         if (slideValue > 0.9) {
+                          AudioService.stopAlarm();
                           Navigator.pushNamed(context, '/hub');
                         } else {
+                          AudioService.stopAlarm();
                           setState(() => slideValue = 0);
                         }
                       },

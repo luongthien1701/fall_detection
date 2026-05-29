@@ -19,7 +19,6 @@ class _SignupWidgetState extends State<SignupWidget> {
       TextEditingController();
 
   @override
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
@@ -137,7 +136,7 @@ class _SignupWidgetState extends State<SignupWidget> {
                               ),
                             ),
                       ),
-                      onPressed: () {
+                      onPressed: () async {
                         final fcmtoken = context.read<FcmProvider>().token;
                         final email = _emailController.text;
                         final password = _passwordController.text;
@@ -149,7 +148,7 @@ class _SignupWidgetState extends State<SignupWidget> {
                           );
                           return;
                         }
-                        final mess = context.read<AuthProvider>().signup(
+                        final mess = await context.read<AuthProvider>().signup(
                           firstName,
                           email,
                           password,
@@ -157,10 +156,15 @@ class _SignupWidgetState extends State<SignupWidget> {
                           fcmtoken ?? "",
                         );
 
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(mess.toString())),
+                          SnackBar(content: Text(mess ?? "Sign up failed")),
                         );
+                        if (!context.read<AuthProvider>().isLogin) {
+                          return;
+                        }
                         Future.delayed(Duration(seconds: 1), () {
+                          if (!context.mounted) return;
                           Navigator.pushNamed(context, '/login');
                         });
                       },

@@ -3,27 +3,84 @@ import pandas as pd
 import time
 
 from app.core import state
-from app.config import WINDOW_SIZE, STEP_SIZE, ALERT_COOLDOWN, BROKER, PORT
+from app.config import (
+    ALERT_COOLDOWN,
+    BROKER,
+    MQTT_CONTROL_TOPIC_TEMPLATE,
+    MQTT_DATA_TOPIC,
+    MQTT_STATUS_TOPIC,
+    PORT,
+    STEP_SIZE,
+    WINDOW_SIZE,
+)
 from app.services.feature_service import extract_features, columns
 from app.services.model_service import predict
 from app.services.fcm import send_fcm
 from app.db.database import SessionLocal
-from app.db.model import User, FallEvent
+from app.db.model import Device, FallEvent, User, UserDevice
 
 mqtt_client = None
+
+
+def _parse_payload(data):
+    parts = [part.strip() for part in data.split(",")]
+
+    if len(parts) >= 8:
+        device_code = parts[0]
+        row = list(map(float, parts[1:8]))
+        return device_code, row
+
+    row = list(map(float, parts))
+    if len(row) < 7:
+        return None, None
+
+    return "UNKNOWN", row[:7]
+
+
+def _mark_device_online(device_code):
+    now = time.time()
+    state.devices[device_code] = {
+        "status": "online",
+        "last_update": now,
+    }
+    state.device_status = "online"
+    state.last_update = now
+
+    if mqtt_client:
+        mqtt_client.publish(MQTT_STATUS_TOPIC, f"{device_code},online")
+
+    db = SessionLocal()
+    try:
+        device = db.query(Device).filter(Device.code == device_code).first()
+        if not device:
+            device = Device(
+                code=device_code,
+                name=f"Thiết bị {device_code}",
+                status="online",
+                last_update=now,
+            )
+            db.add(device)
+        else:
+            device.status = "online"
+            device.last_update = now
+        db.commit()
+    finally:
+        db.close()
+
+
+def _control_topic(device_code):
+    return MQTT_CONTROL_TOPIC_TEMPLATE.format(device_code=device_code)
+
+
 # ===== HANDLER (GIỐNG WS) =====
 def handler(data):
     try:
-        row = list(map(float, data.split(",")))
+        device_code, row = _parse_payload(data)
 
-        if len(row) < 7:
+        if not device_code or not row:
             return
 
-        if state.device_status != "online":
-            state.device_status = "online"
-            mqtt_client.publish("esp32/device/status", "online")
-
-        state.last_update = time.time()
+        _mark_device_online(device_code)
 
         values = [
             pd.Timestamp.now().timestamp(),
@@ -31,21 +88,28 @@ def handler(data):
             row[6]
         ]
 
-        state.queue.append(values)
+        device_queue = state.device_queues[device_code]
+        device_queue.append(values)
 
-        if len(state.queue) >= WINDOW_SIZE:
+        if len(device_queue) >= WINDOW_SIZE:
 
-            df = pd.DataFrame(list(state.queue)[:WINDOW_SIZE], columns=columns)
+            df = pd.DataFrame(list(device_queue)[:WINDOW_SIZE], columns=columns)
             pred = predict(extract_features(df))
 
             if pred == 1:
 
                 now = time.time()
 
-                if now - state.last_alert_time > ALERT_COOLDOWN:
+                if now - state.device_last_alert_time[device_code] > ALERT_COOLDOWN:
 
                     db = SessionLocal()
-                    users = db.query(User).all()
+                    users = (
+                        db.query(User)
+                        .join(UserDevice, UserDevice.user_id == User.id)
+                        .join(Device, Device.id == UserDevice.device_id)
+                        .filter(Device.code == device_code)
+                        .all()
+                    )
 
                     message = f"Fall detected!"
 
@@ -55,16 +119,18 @@ def handler(data):
 
                     db.add(FallEvent(
                         time=time.ctime(),
-                        total_a=row[6]
+                        total_a=row[6],
+                        device_code=device_code,
                     ))
                     db.commit()
                     db.close()
 
                     state.last_alert_time = now
+                    state.device_last_alert_time[device_code] = now
 
             for _ in range(STEP_SIZE):
-                if state.queue:
-                    state.queue.popleft()
+                if device_queue:
+                    device_queue.popleft()
 
     except Exception as e:
         print("Error:", e)
@@ -77,7 +143,7 @@ def start_mqtt(handler_func):
 
     def on_connect(client, userdata, flags, rc):
         print("MQTT connected:", rc)
-        client.subscribe("esp32/data")
+        client.subscribe(MQTT_DATA_TOPIC)
 
     def on_message(client, userdata, msg):
         data = msg.payload.decode()
@@ -89,9 +155,9 @@ def start_mqtt(handler_func):
     mqtt_client.connect(BROKER, PORT, 60)
     mqtt_client.loop_start()
 # ===== PUBLISH CONTROL =====
-def publish_control(command):
+def publish_control(command, device_code):
     if mqtt_client:
-        mqtt_client.publish("esp32/device/control", command)
-        print(f"Published control command: {command}")
+        mqtt_client.publish(_control_topic(device_code), command)
+        print(f"Published control command: {command} to {device_code}")
     else:
         print("MQTT client not connected")

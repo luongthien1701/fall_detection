@@ -5,8 +5,11 @@
 #include <PubSubClient.h>
 
 // ===== MQTT =====
-const char* mqtt_server = "20.19.56.30";
+const char* mqtt_server = "broker.hivemq.com";
 const int mqtt_port = 1883;
+const char* device_code = "FD-001";
+const char* mqtt_data_topic = "esp32/fall_detection/data";
+String mqtt_control_topic = String("esp32/fall_detection/") + device_code + "/control";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -28,7 +31,7 @@ void reconnect() {
     
     if (client.connect("ESP32_Client")) {
       Serial.println("connected");
-       client.subscribe("esp32/control");
+      client.subscribe(mqtt_control_topic.c_str());
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -48,7 +51,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(message);
 
-  if (String(topic) == "esp32/control") {
+  if (String(topic) == mqtt_control_topic) {
     if (message == "on") {
       deviceOn = true;
       Serial.println("Device turned ON");
@@ -74,6 +77,8 @@ void setup() {
 
   Serial.println("WiFi connected");
   Serial.println(WiFi.localIP());
+  Serial.print("Device code: ");
+  Serial.println(device_code);
 
   // ===== MQTT =====
   client.setServer(mqtt_server, mqtt_port);
@@ -107,11 +112,11 @@ void loop() {
 
     // 🔥 dùng char thay vì String (tránh crash)
     char data[120];
-    sprintf(data, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
-            ax, ay, az, gx, gy, gz, A);
+    sprintf(data, "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+            device_code, ax, ay, az, gx, gy, gz, A);
 
     // ===== publish =====
-    client.publish("esp32/data", data);
+    client.publish(mqtt_data_topic, data);
 
     Serial.println(data);
   }

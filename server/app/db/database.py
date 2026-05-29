@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 DATABASE_URL = "sqlite:///./app.db"
@@ -10,3 +10,70 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
+
+
+def ensure_schema():
+    inspector = inspect(engine)
+
+    migrations = {
+        "fall_events": {
+            "device_code": "ALTER TABLE fall_events ADD COLUMN device_code VARCHAR",
+        },
+        "devices": {
+            "name": "ALTER TABLE devices ADD COLUMN name VARCHAR",
+            "status": "ALTER TABLE devices ADD COLUMN status VARCHAR",
+            "last_update": "ALTER TABLE devices ADD COLUMN last_update FLOAT",
+        },
+    }
+
+    with engine.begin() as conn:
+        for table, columns in migrations.items():
+            if not inspector.has_table(table):
+                continue
+
+            existing_columns = {
+                column["name"] for column in inspector.get_columns(table)
+            }
+            for column, statement in columns.items():
+                if column not in existing_columns:
+                    conn.execute(text(statement))
+
+        users_has_legacy_device_code = False
+        if inspector.has_table("users"):
+            users_has_legacy_device_code = any(
+                column["name"] == "device_code"
+                for column in inspector.get_columns("users")
+            )
+
+        if (
+            users_has_legacy_device_code
+            and inspector.has_table("users")
+            and inspector.has_table("devices")
+        ):
+            conn.execute(text("""
+                INSERT OR IGNORE INTO devices (code, name, status)
+                SELECT DISTINCT device_code, 'Thiết bị ' || device_code, 'offline'
+                FROM users
+                WHERE device_code IS NOT NULL AND device_code != ''
+            """))
+
+        if (
+            users_has_legacy_device_code
+            and inspector.has_table("users")
+            and inspector.has_table("devices")
+            and inspector.has_table("user_devices")
+        ):
+            conn.execute(text("""
+                INSERT INTO user_devices (user_id, device_id)
+                SELECT users.id, devices.id
+                FROM users
+                JOIN devices ON devices.code = users.device_code
+                WHERE users.device_code IS NOT NULL
+                  AND users.device_code != ''
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM user_devices
+                      WHERE user_devices.user_id = users.id
+                        AND user_devices.device_id = devices.id
+                  )
+            """))

@@ -1,4 +1,3 @@
-import 'package:fall_detect/model/history.dart';
 import 'package:fall_detect/provider/device_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +15,7 @@ class _HistoryWidgetState extends State<HistoryWidget> {
   String formatTime(DateTime time) {
     return DateFormat('HH:mm dd/MM/yyyy').format(time);
   }
+
   void pickDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -29,6 +29,7 @@ class _HistoryWidgetState extends State<HistoryWidget> {
       });
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final historyList = context.watch<DeviceProvider>().history;

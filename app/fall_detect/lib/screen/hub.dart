@@ -1,10 +1,7 @@
-import 'package:fall_detect/model/device.dart';
 import 'package:fall_detect/provider/auth_provider.dart';
 import 'package:fall_detect/provider/device_provider.dart';
 import 'package:fall_detect/provider/mqtt_provider.dart';
-import 'package:fall_detect/screen/history.dart';
 import 'package:fall_detect/screen/home.dart';
-import 'package:fall_detect/screen/setting.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -16,8 +13,6 @@ class HubWidget extends StatefulWidget {
 }
 
 class _HubWidgetState extends State<HubWidget> {
-  final pages = [HomeWidget(), HistoryWidget(), SettingWidget()];
-  int pageIndex = 0;
   @override
   void initState() {
     super.initState();
@@ -28,55 +23,32 @@ class _HubWidgetState extends State<HubWidget> {
   }
 
   void _connectMqtt() async {
+    final authProvider = context.read<AuthProvider>();
     final mqttProvider = context.read<MqttProvider>();
     final deviceProvider = context.read<DeviceProvider>();
 
+    deviceProvider.setDeviceCode(authProvider.deviceCode);
     mqttProvider.setDeviceProvider(deviceProvider);
 
     await mqttProvider.init();
-    mqttProvider.subscribe('esp32/device/status');
+    mqttProvider.subscribe('esp32/fall_detection/status');
   }
 
   void loaddata() async {
+    final authProvider = context.read<AuthProvider>();
     final deviceProvider = context.read<DeviceProvider>();
+    deviceProvider.setDeviceCode(authProvider.deviceCode);
     await deviceProvider.getStatus();
     await deviceProvider.getHistory();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: AnimatedSwitcher(
-        duration: Duration(milliseconds: 350),
-        transitionBuilder: (child, animation) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        child: pages[pageIndex],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: pageIndex,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-        onTap: (index) {
-          setState(() {
-            pageIndex = index;
-          });
-        },
-      ),
-    );
+    return const HomeWidget();
   }
 
   @override
   void dispose() {
-    context.read<AuthProvider>().logout();
     super.dispose();
   }
 }

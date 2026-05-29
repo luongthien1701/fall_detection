@@ -8,3 +8,4 @@ sqlalchemy
 passlib[bcrypt]
 requests
 google-auth
+paho-mqtt

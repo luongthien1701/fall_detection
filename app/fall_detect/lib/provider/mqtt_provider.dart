@@ -23,7 +23,7 @@ class MqttProvider extends ChangeNotifier {
     _service.subscribe(topic);
 
     _service.listen(topic).listen((msg) async {
-      if (topic.contains("esp32/device/status" )) {
+      if (topic.contains("esp32/fall_detection/status")) {
         print("Received MQTT message: $msg");
         await _deviceProvider?.getStatus();
       }
