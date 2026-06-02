@@ -22,7 +22,9 @@ def monitor_timeout():
 
                     if mqtt_handle.mqtt_client:
                         mqtt_handle.mqtt_client.publish(
-                            MQTT_STATUS_TOPIC, f"{device_code},offline"
+                            MQTT_STATUS_TOPIC,
+                            f"{device_code},offline",
+                            retain=True,
                         )
 
                     db = SessionLocal()
@@ -48,7 +50,9 @@ def monitor_timeout():
                     # 🔥 lấy client động
                     if mqtt_handle.mqtt_client:
                         mqtt_handle.mqtt_client.publish(
-                            MQTT_STATUS_TOPIC, "offline"
+                            MQTT_STATUS_TOPIC,
+                            "offline",
+                            retain=True,
                         )
 
         time.sleep(1)

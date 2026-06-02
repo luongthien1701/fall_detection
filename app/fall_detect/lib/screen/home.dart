@@ -35,6 +35,20 @@ class _HomeWidgetState extends State<HomeWidget> {
     final deviceProvider = context.watch<DeviceProvider>();
     final deviceCode = deviceProvider.deviceCode;
     final hasDevice = deviceCode != null && deviceCode.isNotEmpty;
+    final isOnline = deviceProvider.device?.status == "online";
+
+    Future<void> triggerBuzzer() async {
+      final success = await context.read<DeviceProvider>().triggerBuzzer();
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success ? "Đã gửi lệnh kêu loa" : "Không thể gửi lệnh kêu loa",
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -56,9 +70,10 @@ class _HomeWidgetState extends State<HomeWidget> {
                 child: hasDevice
                     ? _DeviceCameraCard(
                         deviceCode: deviceCode,
-                        isOnline: deviceProvider.device?.status == "online",
+                        isOnline: isOnline,
                         isLoading: deviceProvider.isLoading,
                         onOpen: openDeviceDetail,
+                        onAlarm: isOnline ? triggerBuzzer : null,
                       )
                     : _NoDeviceView(
                         onAdd: () =>
@@ -179,12 +194,14 @@ class _DeviceCameraCard extends StatelessWidget {
     required this.isOnline,
     required this.isLoading,
     required this.onOpen,
+    required this.onAlarm,
   });
 
   final String deviceCode;
   final bool isOnline;
   final bool isLoading;
   final VoidCallback onOpen;
+  final VoidCallback? onAlarm;
 
   @override
   Widget build(BuildContext context) {
@@ -268,7 +285,8 @@ class _DeviceCameraCard extends StatelessWidget {
                 _DeviceAction(
                   icon: Icons.notifications_active,
                   label: "Thông báo\nbáo động",
-                  color: const Color(0xFFFFC107),
+                  color: isOnline ? const Color(0xFFFFC107) : Colors.grey,
+                  onTap: onAlarm,
                 ),
                 _DeviceAction(
                   icon: isOnline ? Icons.toggle_on : Icons.toggle_off,
@@ -634,8 +652,8 @@ class _DeviceSettingsTabState extends State<_DeviceSettingsTab> {
   @override
   Widget build(BuildContext context) {
     final deviceProvider = context.watch<DeviceProvider>();
-    final deviceOnline = deviceProvider.device?.status == 'online';
-    final switchValue = deviceOnline ? isOn : false;
+    final canControl = (deviceProvider.deviceCode ?? "").isNotEmpty;
+    final switchValue = isOn;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -686,7 +704,7 @@ class _DeviceSettingsTabState extends State<_DeviceSettingsTab> {
                   Switch(
                     value: switchValue,
                     activeThumbColor: Colors.green,
-                    onChanged: deviceOnline
+                    onChanged: canControl
                         ? (value) async {
                             final provider = context.read<DeviceProvider>();
                             final messenger = ScaffoldMessenger.of(context);
@@ -719,6 +737,8 @@ class _DeviceSettingsTabState extends State<_DeviceSettingsTab> {
                                   ),
                                 ),
                               );
+                            } else {
+                              await provider.getStatus();
                             }
                           }
                         : null,

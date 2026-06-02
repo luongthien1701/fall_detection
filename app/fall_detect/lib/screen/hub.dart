@@ -32,6 +32,7 @@ class _HubWidgetState extends State<HubWidget> {
 
     await mqttProvider.init();
     mqttProvider.subscribe('esp32/fall_detection/status');
+    mqttProvider.subscribe('esp32/fall_detection/events');
   }
 
   void loaddata() async {

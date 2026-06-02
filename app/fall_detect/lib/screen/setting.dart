@@ -93,15 +93,20 @@ class _SettingWidgetState extends State<SettingWidget> {
                         builder: (context) {
                           final deviceProvider = context
                               .watch<DeviceProvider>();
-                          final deviceOnline =
-                              deviceProvider.device?.status == 'online';
-                          final switchValue = deviceOnline ? ison : false;
+                          final canControl =
+                              (deviceProvider.deviceCode ?? "").isNotEmpty;
+                          final switchValue = ison;
 
                           return Switch(
                             value: switchValue,
                             activeColor: Colors.green,
-                            onChanged: deviceOnline
+                            onChanged: canControl
                                 ? (value) async {
+                                    final provider = context
+                                        .read<DeviceProvider>();
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
                                     setState(() {
                                       ison = value;
                                     });
@@ -109,23 +114,23 @@ class _SettingWidgetState extends State<SettingWidget> {
                                         await SharedPreferences.getInstance();
                                     prefs.setBool('device_on', value);
                                     String command = value ? 'on' : 'off';
-                                    bool success = await context
-                                        .read<DeviceProvider>()
-                                        .controlDevice(command);
+                                    bool success = await provider.controlDevice(
+                                      command,
+                                    );
                                     if (!success) {
                                       setState(() {
                                         ison = !value;
                                       });
                                       prefs.setBool('device_on', ison);
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
+                                      messenger.showSnackBar(
                                         const SnackBar(
                                           content: Text(
                                             "Không thể điều khiển thiết bị",
                                           ),
                                         ),
                                       );
+                                    } else {
+                                      await provider.getStatus();
                                     }
                                   }
                                 : null,

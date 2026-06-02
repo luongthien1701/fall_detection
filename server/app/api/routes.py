@@ -6,9 +6,19 @@ from app.db.model import Device, FallEvent, UserDevice
 from sqlalchemy.orm import Session
 from app.db.model import User
 from app.services.auth_service import hash_password, verify_password
-from app.mqtt.mqtt_handle import publish_control
+from app.mqtt.mqtt_handle import publish_buzzer, publish_control
 
 router = APIRouter()
+BEEP_COMMANDS = {"beep", "buzzer", "alarm"}
+DEVICE_COMMANDS = {"on", "off"}
+
+
+@router.get("/health")
+def health():
+    return {
+        "success": True,
+        "supported_control_commands": sorted([*DEVICE_COMMANDS, *BEEP_COMMANDS]),
+    }
 
 
 def get_user_device_codes(db: Session, user_id: int):
@@ -231,10 +241,38 @@ def control_device(
     command: str = Body(..., embed=True),
     device_code: str = Body(..., embed=True),
 ):
-    if command in ["on", "off"]:
-        if not device_code:
-            return {"success": False, "message": "Device code is required"}
-        publish_control(command, device_code)
-        return {"success": True, "command": command, "device_code": device_code}
+    command = (command or "").strip().lower()
+    device_code = (device_code or "").strip()
+    print(f"CONTROL request: command={command}, device_code={device_code}")
+
+    if not device_code:
+        print("CONTROL failed: missing device_code")
+        return {"success": False, "message": "Device code is required"}
+
+    if command in DEVICE_COMMANDS:
+        success = publish_control(command, device_code)
+        print(
+            f"CONTROL response: command={command}, "
+            f"device_code={device_code}, success={success}"
+        )
+        return {
+            "success": success,
+            "command": command,
+            "device_code": device_code,
+        }
+
+    if command in BEEP_COMMANDS:
+        success = publish_buzzer(device_code)
+        print(
+            f"CONTROL response: command=beep, "
+            f"device_code={device_code}, success={success}"
+        )
+        return {
+            "success": success,
+            "command": "beep",
+            "device_code": device_code,
+        }
+
     else:
+        print(f"CONTROL failed: invalid command={command}")
         return {"success": False, "message": "Invalid command"}

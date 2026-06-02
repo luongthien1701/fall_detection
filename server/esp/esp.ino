@@ -10,6 +10,7 @@ const int mqtt_port = 1883;
 const char* device_code = "FD-001";
 const char* mqtt_data_topic = "esp32/fall_detection/data";
 String mqtt_control_topic = String("esp32/fall_detection/") + device_code + "/control";
+String mqtt_buzzer_topic = String("esp32/fall_detection/") + device_code + "/buzzer";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -17,12 +18,36 @@ PubSubClient client(espClient);
 // ===== MPU =====
 MPU6050 mpu6050(Wire);
 WiFiManager wm;
+const int i2cSdaPin = 4;
+const int i2cSclPin = 5;
 
 // ===== timing =====
 unsigned long lastSend = 0;
 const int sendInterval = 200;
 // ===== device state =====
 bool deviceOn = true;  // default on
+
+// ===== buzzer =====
+const int buzzerPin = 6;
+bool buzzerOn = false;
+unsigned long buzzerOffAt = 0;
+
+void startBuzzer(unsigned long durationMs) {
+  digitalWrite(buzzerPin, HIGH);
+  buzzerOn = true;
+  buzzerOffAt = millis() + durationMs;
+  Serial.print("Buzzer ON for ");
+  Serial.print(durationMs);
+  Serial.println("ms");
+}
+
+void updateBuzzer() {
+  if (buzzerOn && millis() >= buzzerOffAt) {
+    digitalWrite(buzzerPin, LOW);
+    buzzerOn = false;
+    Serial.println("Buzzer OFF");
+  }
+}
 
 // ===== reconnect MQTT =====
 void reconnect() {
@@ -32,6 +57,7 @@ void reconnect() {
     if (client.connect("ESP32_Client")) {
       Serial.println("connected");
       client.subscribe(mqtt_control_topic.c_str());
+      client.subscribe(mqtt_buzzer_topic.c_str());
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -60,12 +86,29 @@ void callback(char* topic, byte* payload, unsigned int length) {
       Serial.println("Device turned OFF");
     }
   }
+
+  if (String(topic) == mqtt_buzzer_topic) {
+    int separatorIndex = message.indexOf(',');
+    String command = separatorIndex >= 0 ? message.substring(0, separatorIndex) : message;
+    unsigned long durationMs = separatorIndex >= 0
+        ? message.substring(separatorIndex + 1).toInt()
+        : 2000;
+
+    if (command == "beep") {
+      if (durationMs == 0) {
+        durationMs = 2000;
+      }
+      startBuzzer(durationMs);
+    }
+  }
 }
 void setup() {
   Serial.begin(115200);
+  pinMode(buzzerPin, OUTPUT);
+  digitalWrite(buzzerPin, LOW);
 
   // ===== MPU =====
-  Wire.begin(21, 22);
+  Wire.begin(i2cSdaPin, i2cSclPin);
   mpu6050.begin();
   mpu6050.calcGyroOffsets(true);
 
@@ -93,6 +136,7 @@ void loop() {
     reconnect();
   }
   client.loop();
+  updateBuzzer();
 
   // ===== gửi dữ liệu =====
   if (deviceOn && millis() - lastSend > sendInterval) {

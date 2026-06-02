@@ -35,11 +35,19 @@ class DeviceService {
   }
 
   Future<bool> controlDevice(String command, String deviceCode) async {
+    final uri = Uri.parse('${Ip.ip}/control');
+    final body = json.encode({'command': command, 'device_code': deviceCode});
+    print('CONTROL API request url=$uri body=$body');
+
     final response = await http.post(
-      Uri.parse('${Ip.ip}/control'),
+      uri,
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'command': command, 'device_code': deviceCode}),
+      body: body,
     );
+    print(
+      'CONTROL API response status=${response.statusCode} body=${response.body}',
+    );
+
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       return data['success'] ?? false;

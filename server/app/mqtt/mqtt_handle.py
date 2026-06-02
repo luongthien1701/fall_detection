@@ -6,8 +6,11 @@ from app.core import state
 from app.config import (
     ALERT_COOLDOWN,
     BROKER,
+    BUZZER_DURATION_MS,
+    MQTT_BUZZER_TOPIC_TEMPLATE,
     MQTT_CONTROL_TOPIC_TEMPLATE,
     MQTT_DATA_TOPIC,
+    MQTT_EVENT_TOPIC,
     MQTT_STATUS_TOPIC,
     PORT,
     STEP_SIZE,
@@ -39,6 +42,7 @@ def _parse_payload(data):
 
 def _mark_device_online(device_code):
     now = time.time()
+    previous_status = state.devices.get(device_code, {}).get("status")
     state.devices[device_code] = {
         "status": "online",
         "last_update": now,
@@ -46,8 +50,12 @@ def _mark_device_online(device_code):
     state.device_status = "online"
     state.last_update = now
 
-    if mqtt_client:
-        mqtt_client.publish(MQTT_STATUS_TOPIC, f"{device_code},online")
+    if mqtt_client and previous_status != "online":
+        mqtt_client.publish(
+            MQTT_STATUS_TOPIC,
+            f"{device_code},online",
+            retain=True,
+        )
 
     db = SessionLocal()
     try:
@@ -70,6 +78,31 @@ def _mark_device_online(device_code):
 
 def _control_topic(device_code):
     return MQTT_CONTROL_TOPIC_TEMPLATE.format(device_code=device_code)
+
+
+def _buzzer_topic(device_code):
+    return MQTT_BUZZER_TOPIC_TEMPLATE.format(device_code=device_code)
+
+
+def publish_buzzer(device_code, duration_ms=BUZZER_DURATION_MS):
+    topic = _buzzer_topic(device_code)
+    payload = f"beep,{duration_ms}"
+    print(
+        f"MQTT publish buzzer requested: topic={topic}, payload={payload}, "
+        f"client_ready={mqtt_client is not None}"
+    )
+
+    if mqtt_client:
+        result = mqtt_client.publish(topic, payload)
+        success = result.rc == mqtt.MQTT_ERR_SUCCESS
+        print(
+            f"MQTT publish buzzer result: topic={topic}, "
+            f"rc={result.rc}, mid={result.mid}, success={success}"
+        )
+        return success
+
+    print("MQTT publish buzzer failed: MQTT client not connected")
+    return False
 
 
 # ===== HANDLER (GIỐNG WS) =====
@@ -125,6 +158,12 @@ def handler(data):
                     db.commit()
                     db.close()
 
+                    if mqtt_client:
+                        mqtt_client.publish(
+                            MQTT_EVENT_TOPIC, f"{device_code},fall_detected"
+                        )
+                        publish_buzzer(device_code)
+
                     state.last_alert_time = now
                     state.device_last_alert_time[device_code] = now
 
@@ -156,8 +195,20 @@ def start_mqtt(handler_func):
     mqtt_client.loop_start()
 # ===== PUBLISH CONTROL =====
 def publish_control(command, device_code):
+    topic = _control_topic(device_code)
+    print(
+        f"MQTT publish control requested: topic={topic}, payload={command}, "
+        f"client_ready={mqtt_client is not None}"
+    )
+
     if mqtt_client:
-        mqtt_client.publish(_control_topic(device_code), command)
-        print(f"Published control command: {command} to {device_code}")
+        result = mqtt_client.publish(topic, command)
+        success = result.rc == mqtt.MQTT_ERR_SUCCESS
+        print(
+            f"MQTT publish control result: topic={topic}, "
+            f"rc={result.rc}, mid={result.mid}, success={success}"
+        )
+        return success
     else:
-        print("MQTT client not connected")
+        print("MQTT publish control failed: MQTT client not connected")
+        return False

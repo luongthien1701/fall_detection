@@ -49,14 +49,27 @@ class DeviceProvider extends ChangeNotifier {
 
   Future<bool> controlDevice(String command) async {
     if (_deviceCode == null || _deviceCode!.isEmpty) {
+      print("Control skipped: deviceCode is empty, command=$command");
       return false;
     }
 
+    print("Control start: command=$command deviceCode=$_deviceCode");
     try {
-      return await DeviceService().controlDevice(command, _deviceCode!);
+      final success = await DeviceService().controlDevice(
+        command,
+        _deviceCode!,
+      );
+      print(
+        "Control result: command=$command deviceCode=$_deviceCode success=$success",
+      );
+      return success;
     } catch (e) {
       print("Error controlling device: $e");
       return false;
     }
+  }
+
+  Future<bool> triggerBuzzer() {
+    return controlDevice('beep');
   }
 }
