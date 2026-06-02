@@ -1,28 +1,38 @@
-from pathlib import Path
-
 import joblib
+import pandas as pd
+
+model = joblib.load("model/fall_model.pkl")
 
 
-def _find_model_path():
-    root_dir = Path(__file__).resolve().parents[3]
-    server_dir = Path(__file__).resolve().parents[2]
-    candidates = [
-        server_dir / "model" / "fall_model.pkl",
-        root_dir / "fall_model.pkl",
-        root_dir / "falldetact_model.pkl",
-    ]
+def _align_features(X: pd.DataFrame):
+    # Đảm bảo cột realtime đúng thứ tự cột lúc train
+    if hasattr(model, "feature_names_in_"):
+        X = X.reindex(columns=model.feature_names_in_, fill_value=0)
+    return X
 
-    for path in candidates:
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "Could not find fall model. Expected one of: "
-        + ", ".join(str(path) for path in candidates)
-    )
-
-
-model = joblib.load(_find_model_path())
 
 def predict(X):
-    return model.predict(X)[0]
+    X = _align_features(X)
+    return int(model.predict(X)[0])
+
+
+def predict_with_proba(X, threshold=0.8):
+    """
+    threshold càng cao thì càng khó báo té ngã.
+    0.75: nhạy
+    0.80: vừa
+    0.85: khó hơn
+    0.90: rất khó báo
+    """
+
+    X = _align_features(X)
+
+    proba = model.predict_proba(X)[0]
+
+    # Lấy xác suất của class 1 = fall
+    fall_index = list(model.classes_).index(1)
+    fall_prob = float(proba[fall_index])
+
+    pred = 1 if fall_prob >= threshold else 0
+
+    return pred, fall_prob
