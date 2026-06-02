@@ -93,8 +93,11 @@ class _SignupWidgetState extends State<SignupWidget> {
                       padding: const EdgeInsets.symmetric(horizontal: 20.0),
                       child: TextField(
                         controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        autofillHints: const [AutofillHints.telephoneNumber],
+                        obscureText: false,
                         decoration: InputDecoration(
-                          labelText: "Phone Number",
+                          labelText: "Số điện thoại người dùng app",
                           border: OutlineInputBorder(),
                         ),
                       ),

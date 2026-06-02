@@ -1,6 +1,9 @@
 import 'package:fall_detect/service/audioservice.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../provider/auth_provider.dart';
 
 class HazardousWidget extends StatefulWidget {
   const HazardousWidget({super.key});
@@ -19,8 +22,32 @@ class _HazardousWidgetState extends State<HazardousWidget> {
   }
 
   Future<void> callFamily() async {
-    final url = Uri(scheme: 'tel', path: '0332775136');
-    await launchUrl(url, mode: LaunchMode.externalApplication);
+    final authProvider = context.read<AuthProvider>();
+    final phones = [
+      authProvider.relativePhone1,
+      authProvider.relativePhone2,
+    ].where((phone) => phone.isNotEmpty).toList();
+
+    if (phones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa có số điện thoại người thân')),
+      );
+      return;
+    }
+
+    for (final phone in phones) {
+      final url = Uri(scheme: 'tel', path: phone);
+      final launched = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched) return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Không thể gọi số người thân')),
+    );
   }
 
   @override

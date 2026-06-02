@@ -1,3 +1,4 @@
+import 'package:fall_detect/provider/auth_provider.dart';
 import 'package:fall_detect/provider/device_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -12,6 +13,37 @@ class HomeWidget extends StatefulWidget {
 }
 
 class _HomeWidgetState extends State<HomeWidget> {
+  Color deviceBackgroundColor = const Color(0xFFE9EEF5);
+  bool _hasPromptedForRequiredInfo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      loadDeviceBackground();
+    });
+  }
+
+  Future<void> loadDeviceBackground() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      deviceBackgroundColor = Color(
+        prefs.getInt('device_background_color') ?? 0xFFE9EEF5,
+      );
+    });
+    promptForRequiredInfoIfNeeded();
+  }
+
+  Future<void> setDeviceBackground(Color color) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('device_background_color', color.toARGB32());
+    if (!mounted) return;
+    setState(() {
+      deviceBackgroundColor = color;
+    });
+  }
+
   String timeAgo(double ts) {
     final now = DateTime.now();
     final time = DateTime.fromMillisecondsSinceEpoch((ts * 1000).toInt());
@@ -27,6 +59,127 @@ class _HomeWidgetState extends State<HomeWidget> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => DeviceDetailWidget(timeAgo: timeAgo)),
+    );
+  }
+
+  Future<void> showConnectDeviceDialog() async {
+    final controller = TextEditingController();
+    var isLoading = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !isLoading,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> connectDevice() async {
+              final deviceCode = controller.text.trim().toUpperCase();
+              if (deviceCode.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Vui lòng nhập mã thiết bị")),
+                );
+                return;
+              }
+
+              setDialogState(() {
+                isLoading = true;
+              });
+
+              final message = await context.read<AuthProvider>().connectDevice(
+                deviceCode,
+              );
+
+              if (!context.mounted) return;
+              setDialogState(() {
+                isLoading = false;
+              });
+
+              if (message != null) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(message)));
+                return;
+              }
+
+              final deviceProvider = context.read<DeviceProvider>();
+              deviceProvider.setDeviceCode(deviceCode);
+              await deviceProvider.getStatus();
+              await deviceProvider.getHistory();
+
+              if (!context.mounted) return;
+              Navigator.pop(dialogContext);
+            }
+
+            return AlertDialog(
+              title: const Text("Kết nối thiết bị"),
+              content: TextField(
+                controller: controller,
+                enabled: !isLoading,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: "Mã thiết bị",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(context),
+                  child: const Text("Hủy"),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading ? null : connectDevice,
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text("Kết nối"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+  }
+
+  void openAppSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AppSettingsWidget(
+          deviceBackgroundColor: deviceBackgroundColor,
+          onDeviceBackgroundChanged: setDeviceBackground,
+        ),
+      ),
+    );
+  }
+
+  void promptForRequiredInfoIfNeeded() {
+    if (_hasPromptedForRequiredInfo) return;
+
+    final authProvider = context.read<AuthProvider>();
+    final hasName = authProvider.firstname.trim().isNotEmpty;
+    final hasPhone = authProvider.appPhone.trim().isNotEmpty;
+    final hasRelativePhone =
+        authProvider.relativePhone1.trim().isNotEmpty ||
+        authProvider.relativePhone2.trim().isNotEmpty;
+
+    if (hasName && hasPhone && hasRelativePhone) return;
+
+    _hasPromptedForRequiredInfo = true;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AppSettingsWidget(
+          deviceBackgroundColor: deviceBackgroundColor,
+          onDeviceBackgroundChanged: setDeviceBackground,
+          requireUserInfo: true,
+        ),
+      ),
     );
   }
 
@@ -61,7 +214,8 @@ class _HomeWidgetState extends State<HomeWidget> {
           slivers: [
             SliverToBoxAdapter(
               child: _DeviceHeader(
-                onAdd: () => Navigator.pushNamed(context, '/device-connect'),
+                onAdd: showConnectDeviceDialog,
+                onSettings: openAppSettings,
               ),
             ),
             SliverPadding(
@@ -72,13 +226,11 @@ class _HomeWidgetState extends State<HomeWidget> {
                         deviceCode: deviceCode,
                         isOnline: isOnline,
                         isLoading: deviceProvider.isLoading,
+                        backgroundColor: deviceBackgroundColor,
                         onOpen: openDeviceDetail,
                         onAlarm: isOnline ? triggerBuzzer : null,
                       )
-                    : _NoDeviceView(
-                        onAdd: () =>
-                            Navigator.pushNamed(context, '/device-connect'),
-                      ),
+                    : _NoDeviceView(onAdd: showConnectDeviceDialog),
               ),
             ),
           ],
@@ -89,9 +241,10 @@ class _HomeWidgetState extends State<HomeWidget> {
 }
 
 class _DeviceHeader extends StatelessWidget {
-  const _DeviceHeader({required this.onAdd});
+  const _DeviceHeader({required this.onAdd, required this.onSettings});
 
   final VoidCallback onAdd;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -114,6 +267,8 @@ class _DeviceHeader extends StatelessWidget {
           ),
 
           const SizedBox(width: 12),
+          _HeaderIconButton(icon: Icons.more_vert, onPressed: onSettings),
+          const SizedBox(width: 8),
           _HeaderIconButton(icon: Icons.add_circle_outline, onPressed: onAdd),
         ],
       ),
@@ -193,6 +348,7 @@ class _DeviceCameraCard extends StatelessWidget {
     required this.deviceCode,
     required this.isOnline,
     required this.isLoading,
+    required this.backgroundColor,
     required this.onOpen,
     required this.onAlarm,
   });
@@ -200,6 +356,7 @@ class _DeviceCameraCard extends StatelessWidget {
   final String deviceCode;
   final bool isOnline;
   final bool isLoading;
+  final Color backgroundColor;
   final VoidCallback onOpen;
   final VoidCallback? onAlarm;
 
@@ -248,7 +405,16 @@ class _DeviceCameraCard extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                const _CameraPreview(),
+                Container(
+                  height: 180,
+                  width: double.infinity,
+                  color: backgroundColor,
+                  child: Icon(
+                    Icons.watch,
+                    size: 64,
+                    color: Colors.black.withValues(alpha: 0.32),
+                  ),
+                ),
                 Container(
                   width: 72,
                   height: 72,
@@ -308,66 +474,6 @@ class _DeviceCameraCard extends StatelessWidget {
   }
 }
 
-class _CameraPreview extends StatelessWidget {
-  const _CameraPreview();
-
-  @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 1.95,
-      child: GridView.count(
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        padding: EdgeInsets.zero,
-        childAspectRatio: 1.95,
-        children: const [
-          _PreviewPane(color: Color(0xFFB9D7E8), icon: Icons.living),
-          _PreviewPane(color: Color(0xFFC9D6D8), icon: Icons.chair),
-          _PreviewPane(color: Color(0xFFDCE8F3), icon: Icons.door_front_door),
-          _PreviewPane(color: Color(0xFFE0E0E0), icon: Icons.accessibility_new),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewPane extends StatelessWidget {
-  const _PreviewPane({required this.color, required this.icon});
-
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: color,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 8,
-            top: 6,
-            child: Text(
-              "2026-05-29 10:27:00",
-              style: TextStyle(
-                color: Colors.black.withValues(alpha: 0.55),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Center(
-            child: Icon(
-              icon,
-              size: 42,
-              color: Colors.black.withValues(alpha: 0.36),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DeviceAction extends StatelessWidget {
   const _DeviceAction({
     required this.icon,
@@ -396,6 +502,303 @@ class _DeviceAction extends StatelessWidget {
               label,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.black54, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AppSettingsWidget extends StatefulWidget {
+  const AppSettingsWidget({
+    super.key,
+    required this.deviceBackgroundColor,
+    required this.onDeviceBackgroundChanged,
+    this.requireUserInfo = false,
+  });
+
+  final Color deviceBackgroundColor;
+  final Future<void> Function(Color color) onDeviceBackgroundChanged;
+  final bool requireUserInfo;
+
+  @override
+  State<AppSettingsWidget> createState() => _AppSettingsWidgetState();
+}
+
+class _AppSettingsWidgetState extends State<AppSettingsWidget> {
+  final TextEditingController _firstnameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _relativePhone1Controller =
+      TextEditingController();
+  final TextEditingController _relativePhone2Controller =
+      TextEditingController();
+  bool _initialized = false;
+  bool _isSaving = false;
+  late Color _selectedBackgroundColor;
+
+  static const List<Color> _backgroundOptions = [
+    Color(0xFFE9EEF5),
+    Color(0xFFEAF7EE),
+    Color(0xFFFFF3D8),
+    Color(0xFFF4E9FF),
+    Color(0xFFE7F5FF),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedBackgroundColor = widget.deviceBackgroundColor;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+
+    final authProvider = context.read<AuthProvider>();
+    _firstnameController.text = authProvider.firstname;
+    _phoneController.text = authProvider.appPhone;
+    _relativePhone1Controller.text = authProvider.relativePhone1;
+    _relativePhone2Controller.text = authProvider.relativePhone2;
+    _initialized = true;
+  }
+
+  @override
+  void dispose() {
+    _firstnameController.dispose();
+    _phoneController.dispose();
+    _relativePhone1Controller.dispose();
+    _relativePhone2Controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveUserInfo() async {
+    final firstname = _firstnameController.text.trim();
+    final phone = _phoneController.text.trim();
+    final relativePhone1 = _relativePhone1Controller.text.trim();
+    final relativePhone2 = _relativePhone2Controller.text.trim();
+
+    if (firstname.isEmpty || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Vui lòng nhập tên và số điện thoại")),
+      );
+      return;
+    }
+
+    if (relativePhone1.isEmpty && relativePhone2.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Vui lòng nhập ít nhất một số điện thoại người thân"),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    final message = await context.read<AuthProvider>().updateUserInfo(
+      firstname,
+      phone,
+      relativePhone1,
+      relativePhone2,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isSaving = false;
+    });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message ?? "Đã cập nhật thông tin")));
+
+    if (message == null && widget.requireUserInfo) {
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _selectBackground(Color color) async {
+    setState(() {
+      _selectedBackgroundColor = color;
+    });
+    await widget.onDeviceBackgroundChanged(color);
+  }
+
+  void _logout() {
+    context.read<AuthProvider>().logout();
+    context.read<DeviceProvider>().setDeviceCode(null);
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+  }
+
+  bool get _hasRequiredInfo {
+    return _firstnameController.text.trim().isNotEmpty &&
+        _phoneController.text.trim().isNotEmpty &&
+        (_relativePhone1Controller.text.trim().isNotEmpty ||
+            _relativePhone2Controller.text.trim().isNotEmpty);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !widget.requireUserInfo || _hasRequiredInfo,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || !widget.requireUserInfo || _hasRequiredInfo) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Vui lòng cập nhật thông tin trước")),
+        );
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading:
+              !widget.requireUserInfo || _hasRequiredInfo,
+          title: Text(
+            widget.requireUserInfo ? "Cập nhật thông tin" : "Cài đặt",
+          ),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (widget.requireUserInfo)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3D8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFFC857)),
+                ),
+                child: const Text(
+                  "Vui lòng nhập thông tin liên hệ và ít nhất một số người thân để dùng khi có báo khẩn cấp.",
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            _SettingsCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SettingsTitle(
+                    icon: Icons.palette_outlined,
+                    text: "Nền thiết bị",
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: _backgroundOptions.map((color) {
+                      final selected =
+                          color.toARGB32() ==
+                          _selectedBackgroundColor.toARGB32();
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(24),
+                          onTap: () => _selectBackground(color),
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: selected
+                                    ? const Color(0xFF1976F3)
+                                    : Colors.black12,
+                                width: selected ? 3 : 1,
+                              ),
+                            ),
+                            child: selected
+                                ? const Icon(
+                                    Icons.check,
+                                    size: 20,
+                                    color: Color(0xFF1976F3),
+                                  )
+                                : null,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SettingsCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SettingsTitle(
+                    icon: Icons.person_outline,
+                    text: "Thông tin",
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _firstnameController,
+                    decoration: const InputDecoration(
+                      labelText: "Tên",
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    obscureText: false,
+                    decoration: const InputDecoration(
+                      labelText: "Số điện thoại người dùng app",
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _relativePhone1Controller,
+                    keyboardType: TextInputType.phone,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    obscureText: false,
+                    decoration: const InputDecoration(
+                      labelText: "Số người thân 1",
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _relativePhone2Controller,
+                    keyboardType: TextInputType.phone,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    obscureText: false,
+                    decoration: const InputDecoration(
+                      labelText: "Số người thân 2",
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isSaving ? null : _saveUserInfo,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_outlined),
+                      label: const Text("Cập nhật thông tin"),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _logout,
+                icon: const Icon(Icons.logout),
+                label: const Text("Đăng xuất"),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+              ),
             ),
           ],
         ),
@@ -459,9 +862,6 @@ class _DeviceInfoTab extends StatelessWidget {
     final deviceProvider = context.watch<DeviceProvider>();
     final device = deviceProvider.device;
     final isOnline = device?.status == "online";
-    final latestHistory = deviceProvider.history.isNotEmpty
-        ? deviceProvider.history.first
-        : null;
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -478,19 +878,6 @@ class _DeviceInfoTab extends StatelessWidget {
           value: device?.lastUpdate != null
               ? timeAgo(device!.lastUpdate!)
               : "Chưa có dữ liệu",
-        ),
-        _DetailTile(
-          icon: Icons.speed,
-          title: "Gia tốc cảnh báo gần nhất",
-          value: latestHistory != null
-              ? latestHistory.value.toStringAsFixed(2)
-              : "Chưa có cảnh báo",
-        ),
-        _DetailTile(
-          icon: Icons.accessibility_new,
-          title: "Trạng thái người dùng",
-          value: latestHistory == null ? "AN TOÀN" : "CÓ CẢNH BÁO",
-          valueColor: latestHistory == null ? Colors.green : Colors.red,
         ),
       ],
     );
@@ -602,10 +989,6 @@ class _DeviceHistoryTabState extends State<_DeviceHistoryTab> {
                               ],
                             ),
                           ),
-                          Text(
-                            history.value.toStringAsFixed(2),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
                         ],
                       ),
                     );
@@ -626,7 +1009,7 @@ class _DeviceSettingsTab extends StatefulWidget {
 
 class _DeviceSettingsTabState extends State<_DeviceSettingsTab> {
   double volume = 70;
-  bool isOn = true;
+  bool isTogglingDevice = false;
 
   @override
   void initState() {
@@ -645,15 +1028,32 @@ class _DeviceSettingsTabState extends State<_DeviceSettingsTab> {
     if (!mounted) return;
     setState(() {
       volume = prefs.getDouble('volume_$_deviceCode') ?? 70;
-      isOn = prefs.getBool('device_on_$_deviceCode') ?? true;
     });
+  }
+
+  Future<bool> _waitForDeviceStatus(
+    DeviceProvider provider,
+    bool expectedOnline,
+  ) async {
+    for (var attempt = 0; attempt < 12; attempt++) {
+      await Future.delayed(const Duration(seconds: 1));
+      await provider.getStatus();
+
+      final isOnline = provider.device?.status == "online";
+      if (isOnline == expectedOnline) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     final deviceProvider = context.watch<DeviceProvider>();
     final canControl = (deviceProvider.deviceCode ?? "").isNotEmpty;
-    final switchValue = isOn;
+    final isDeviceOnline = deviceProvider.device?.status == "online";
+    final switchValue = isDeviceOnline;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -704,41 +1104,75 @@ class _DeviceSettingsTabState extends State<_DeviceSettingsTab> {
                   Switch(
                     value: switchValue,
                     activeThumbColor: Colors.green,
-                    onChanged: canControl
+                    onChanged: canControl && !isTogglingDevice
                         ? (value) async {
                             final provider = context.read<DeviceProvider>();
                             final messenger = ScaffoldMessenger.of(context);
                             setState(() {
-                              isOn = value;
+                              isTogglingDevice = true;
                             });
-                            final prefs = await SharedPreferences.getInstance();
-                            await prefs.setBool(
-                              'device_on_$_deviceCode',
-                              value,
+                            final command = isDeviceOnline ? 'off' : 'on';
+                            final loadingNavigator = Navigator.of(context);
+                            showDialog<void>(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (_) => const AlertDialog(
+                                content: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                      ),
+                                    ),
+                                    SizedBox(width: 16),
+                                    Expanded(
+                                      child: Text("Vui lòng đợi vài giây"),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             );
-                            final command = value ? 'on' : 'off';
                             final success = await provider.controlDevice(
                               command,
                             );
+                            var statusChanged = false;
+                            if (success) {
+                              statusChanged = await _waitForDeviceStatus(
+                                provider,
+                                command == 'on',
+                              );
+                            }
 
                             if (!mounted) return;
+                            loadingNavigator.pop();
+                            setState(() {
+                              isTogglingDevice = false;
+                            });
+
                             if (!success) {
-                              setState(() {
-                                isOn = !value;
-                              });
-                              await prefs.setBool(
-                                'device_on_$_deviceCode',
-                                isOn,
-                              );
                               messenger.showSnackBar(
-                                const SnackBar(
+                                SnackBar(
                                   content: Text(
-                                    "Không thể điều khiển thiết bị",
+                                    command == 'on'
+                                        ? "Không thể bật thiết bị, thiết bị có thể không có điện"
+                                        : "Không thể tắt thiết bị",
                                   ),
                                 ),
                               );
                             } else {
-                              await provider.getStatus();
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    statusChanged
+                                        ? (command == 'on'
+                                              ? "Thiết bị đã bật"
+                                              : "Thiết bị đã tắt")
+                                        : "Thiết bị chưa cập nhật trạng thái, vui lòng thử lại",
+                                  ),
+                                ),
+                              );
                             }
                           }
                         : null,

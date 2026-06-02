@@ -47,6 +47,18 @@ def get_or_create_device(db: Session, device_code: str):
     db.flush()
     return device
 
+
+def user_payload(user: User):
+    app_phone = user.app_phone or user.phone
+    return {
+        "user_id": user.id,
+        "firstname": user.firstname,
+        "app_phone": app_phone,
+        "phone": app_phone,
+        "relative_phone_1": user.relative_phone_1,
+        "relative_phone_2": user.relative_phone_2,
+    }
+
 @router.get("/status")
 def get_status(device_code: str | None = Query(default=None)):
 
@@ -124,7 +136,10 @@ def register(data: dict = Body(...), db: Session = Depends(get_db)):
         firstname=data.get("firstname"),
         email=email,
         password=hash_password(password),
+        app_phone=data.get("app_phone") or data.get("phone"),
         phone=data.get("phone"),
+        relative_phone_1=data.get("relative_phone_1"),
+        relative_phone_2=data.get("relative_phone_2"),
         fcm_token=data.get("fcm_token")
     )
 
@@ -134,7 +149,7 @@ def register(data: dict = Body(...), db: Session = Depends(get_db)):
     return {
         "success": True,
         "message": "User created successfully",
-        "user_id": user.id,
+        **user_payload(user),
         "device_code": None,
         "device_codes": [],
     }
@@ -160,9 +175,40 @@ def login(data: dict = Body(...), db: Session = Depends(get_db)):
     return {
         "success": True,
         "message": "Login successful",
-        "user_id": user.id,
+        **user_payload(user),
         "device_code": selected_device_code,
         "device_codes": device_codes,
+    }
+
+
+@router.post("/api/user/update")
+def update_user(data: dict = Body(...), db: Session = Depends(get_db)):
+    user_id = data.get("user_id")
+    if not user_id:
+        return {"success": False, "message": "User is required"}
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"success": False, "message": "User not found"}
+
+    if "firstname" in data:
+        user.firstname = data.get("firstname")
+    if "app_phone" in data:
+        user.app_phone = data.get("app_phone")
+    if "phone" in data:
+        user.phone = data.get("phone")
+        if "app_phone" not in data:
+            user.app_phone = data.get("phone")
+    if "relative_phone_1" in data:
+        user.relative_phone_1 = data.get("relative_phone_1")
+    if "relative_phone_2" in data:
+        user.relative_phone_2 = data.get("relative_phone_2")
+
+    db.commit()
+    return {
+        "success": True,
+        "message": "User updated successfully",
+        **user_payload(user),
     }
 
 

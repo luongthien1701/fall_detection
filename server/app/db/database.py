@@ -24,6 +24,11 @@ def ensure_schema():
             "status": "ALTER TABLE devices ADD COLUMN status VARCHAR",
             "last_update": "ALTER TABLE devices ADD COLUMN last_update FLOAT",
         },
+        "users": {
+            "app_phone": "ALTER TABLE users ADD COLUMN app_phone VARCHAR",
+            "relative_phone_1": "ALTER TABLE users ADD COLUMN relative_phone_1 VARCHAR",
+            "relative_phone_2": "ALTER TABLE users ADD COLUMN relative_phone_2 VARCHAR",
+        },
     }
 
     with engine.begin() as conn:
@@ -37,6 +42,20 @@ def ensure_schema():
             for column, statement in columns.items():
                 if column not in existing_columns:
                     conn.execute(text(statement))
+
+        if inspector.has_table("users"):
+            existing_user_columns = {
+                column["name"] for column in inspector.get_columns("users")
+            }
+            existing_user_columns.update(migrations["users"].keys())
+            if {"app_phone", "phone"}.issubset(existing_user_columns):
+                conn.execute(text("""
+                    UPDATE users
+                    SET app_phone = phone
+                    WHERE (app_phone IS NULL OR app_phone = '')
+                      AND phone IS NOT NULL
+                      AND phone != ''
+                """))
 
         users_has_legacy_device_code = False
         if inspector.has_table("users"):

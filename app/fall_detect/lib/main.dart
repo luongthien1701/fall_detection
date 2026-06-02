@@ -2,7 +2,6 @@ import 'package:fall_detect/provider/auth_provider.dart';
 import 'package:fall_detect/provider/device_provider.dart';
 import 'package:fall_detect/provider/fcm_provider.dart';
 import 'package:fall_detect/provider/mqtt_provider.dart';
-import 'package:fall_detect/screen/device_connect.dart';
 import 'package:fall_detect/screen/hazardous.dart';
 import 'package:fall_detect/screen/history.dart';
 import 'package:fall_detect/screen/home.dart';
@@ -58,7 +57,6 @@ class MyApp extends StatelessWidget {
       routes: {
         '/signup': (context) => const SignupWidget(),
         '/login': (context) => const LoginWidget(),
-        '/device-connect': (context) => const DeviceConnectWidget(),
         '/home': (context) => const HomeWidget(),
         '/history': (context) => const HistoryWidget(),
         '/hazardous': (context) => const HazardousWidget(),

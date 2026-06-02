@@ -9,7 +9,10 @@ class User(Base):
     firstname = Column(String)
     email = Column(String, unique=True)
     password = Column(String)
+    app_phone = Column(String)
     phone = Column(String)
+    relative_phone_1 = Column(String)
+    relative_phone_2 = Column(String)
     fcm_token = Column(String)
 
 

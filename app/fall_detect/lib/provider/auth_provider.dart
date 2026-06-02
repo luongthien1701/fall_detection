@@ -5,10 +5,19 @@ class AuthProvider extends ChangeNotifier {
   int _userId = -1;
   String? _deviceCode;
   List<String> _deviceCodes = [];
+  String _firstname = "";
+  String _appPhone = "";
+  String _relativePhone1 = "";
+  String _relativePhone2 = "";
 
   int get userId => _userId;
   String? get deviceCode => _deviceCode;
   List<String> get deviceCodes => List.unmodifiable(_deviceCodes);
+  String get firstname => _firstname;
+  String get appPhone => _appPhone;
+  String get phone => _appPhone;
+  String get relativePhone1 => _relativePhone1;
+  String get relativePhone2 => _relativePhone2;
   bool get isLogin => _userId != -1;
   bool get hasDevice => _deviceCodes.isNotEmpty;
 
@@ -19,12 +28,21 @@ class AuthProvider extends ChangeNotifier {
     return value.map((item) => item.toString()).toList();
   }
 
+  void _setUserInfo(Map<String, dynamic> result) {
+    _firstname = result["firstname"]?.toString() ?? "";
+    _appPhone =
+        result["app_phone"]?.toString() ?? result["phone"]?.toString() ?? "";
+    _relativePhone1 = result["relative_phone_1"]?.toString() ?? "";
+    _relativePhone2 = result["relative_phone_2"]?.toString() ?? "";
+  }
+
   Future<String?> login(String email, String password, String fcmToken) async {
     Authservice authservice = Authservice();
     final result = await authservice.login(email, password, fcmToken);
     debugPrint("Login result: $result");
     if (result["success"] == true) {
       _userId = result["user_id"];
+      _setUserInfo(result);
       _deviceCodes = _parseDeviceCodes(result["device_codes"]);
       _deviceCode =
           result["device_code"] ??
@@ -39,7 +57,7 @@ class AuthProvider extends ChangeNotifier {
     String firstname,
     String email,
     String password,
-    String phone,
+    String appPhone,
     String fcmToken,
   ) async {
     Authservice authservice = Authservice();
@@ -47,12 +65,13 @@ class AuthProvider extends ChangeNotifier {
       firstname,
       email,
       password,
-      phone,
+      appPhone,
       fcmToken,
     );
 
     if (result["success"] == true) {
       _userId = result["user_id"];
+      _setUserInfo(result);
       _deviceCodes = _parseDeviceCodes(result["device_codes"]);
       _deviceCode = _deviceCodes.isNotEmpty ? _deviceCodes.first : null;
       notifyListeners();
@@ -77,10 +96,38 @@ class AuthProvider extends ChangeNotifier {
     return result["message"];
   }
 
+  Future<String?> updateUserInfo(
+    String firstname,
+    String appPhone,
+    String relativePhone1,
+    String relativePhone2,
+  ) async {
+    Authservice authservice = Authservice();
+    final result = await authservice.updateUser(
+      _userId,
+      firstname,
+      appPhone,
+      relativePhone1,
+      relativePhone2,
+    );
+
+    if (result["success"] == true) {
+      _setUserInfo(result);
+      notifyListeners();
+      return null;
+    }
+
+    return result["message"];
+  }
+
   void logout() {
     _userId = -1;
     _deviceCode = null;
     _deviceCodes = [];
+    _firstname = "";
+    _appPhone = "";
+    _relativePhone1 = "";
+    _relativePhone2 = "";
     notifyListeners();
   }
 }

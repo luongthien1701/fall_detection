@@ -28,7 +28,7 @@ class Authservice {
     String firstname,
     String email,
     String password,
-    String phone,
+    String appPhone,
     String fcmToken,
   ) async {
     final response = await http.post(
@@ -38,10 +38,36 @@ class Authservice {
         'firstname': firstname,
         'email': email,
         'password': password,
-        'phone': phone,
+        'app_phone': appPhone,
+        'phone': appPhone,
         'fcm_token': fcmToken,
       }),
     );
+    final data = jsonDecode(response.body);
+
+    return data;
+  }
+
+  Future<Map<String, dynamic>> updateUser(
+    int userId,
+    String firstname,
+    String appPhone,
+    String relativePhone1,
+    String relativePhone2,
+  ) async {
+    final response = await http.post(
+      Uri.parse('${Ip.ip}/api/user/update'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        'user_id': userId,
+        'firstname': firstname,
+        'app_phone': appPhone,
+        'phone': appPhone,
+        'relative_phone_1': relativePhone1,
+        'relative_phone_2': relativePhone2,
+      }),
+    );
+
     final data = jsonDecode(response.body);
 
     return data;

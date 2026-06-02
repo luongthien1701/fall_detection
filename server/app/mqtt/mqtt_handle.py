@@ -87,25 +87,16 @@ def _buzzer_topic(device_code):
 def publish_buzzer(device_code, duration_ms=BUZZER_DURATION_MS):
     topic = _buzzer_topic(device_code)
     payload = f"beep,{duration_ms}"
-    print(
-        f"MQTT publish buzzer requested: topic={topic}, payload={payload}, "
-        f"client_ready={mqtt_client is not None}"
-    )
+    
 
     if mqtt_client:
         result = mqtt_client.publish(topic, payload)
         success = result.rc == mqtt.MQTT_ERR_SUCCESS
-        print(
-            f"MQTT publish buzzer result: topic={topic}, "
-            f"rc={result.rc}, mid={result.mid}, success={success}"
-        )
         return success
 
-    print("MQTT publish buzzer failed: MQTT client not connected")
     return False
 
 
-# ===== HANDLER (GIỐNG WS) =====
 def handler(data):
     try:
         device_code, row = _parse_payload(data)
