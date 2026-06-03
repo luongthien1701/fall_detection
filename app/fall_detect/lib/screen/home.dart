@@ -164,13 +164,12 @@ class _HomeWidgetState extends State<HomeWidget> {
     if (_hasPromptedForRequiredInfo) return;
 
     final authProvider = context.read<AuthProvider>();
-    final hasName = authProvider.firstname.trim().isNotEmpty;
-    final hasPhone = authProvider.appPhone.trim().isNotEmpty;
+    final hasPhone = authProvider.phone.trim().isNotEmpty;
     final hasRelativePhone =
         authProvider.relativePhone1.trim().isNotEmpty ||
         authProvider.relativePhone2.trim().isNotEmpty;
 
-    if (hasName && hasPhone && hasRelativePhone) return;
+    if (hasPhone && hasRelativePhone) return;
 
     _hasPromptedForRequiredInfo = true;
     Navigator.push(

@@ -24,6 +24,7 @@ class _LoginWidgetState extends State<LoginWidget> {
     String? token = await FirebaseMessaging.instance.getToken();
 
     if (token != null) {
+      if (!mounted) return;
       Provider.of<FcmProvider>(context, listen: false).setToken(token);
     }
   }

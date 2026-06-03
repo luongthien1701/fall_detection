@@ -223,10 +223,10 @@ class _SettingWidgetState extends State<SettingWidget> {
             child: const Text("Hủy"),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              // TODO: xử lý logout
-              context.read<AuthProvider>().logout();
+              await context.read<AuthProvider>().logout();
+              if (!mounted) return;
               context.read<DeviceProvider>().setDeviceCode(null);
               Navigator.pushReplacementNamed(context, '/login');
             },

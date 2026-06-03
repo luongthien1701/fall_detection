@@ -140,9 +140,17 @@ def handler(data):
                         )
 
                         message = f"Fall detected!"
+                        print(
+                            f"FCM target users: device_code={device_code}, "
+                            f"count={len(users)}"
+                        )
 
                         for user in users:
-                            send_fcm(user.fcm_token, message, device_code)
+                            sent = send_fcm(user.fcm_token, message, device_code)
+                            print(
+                                f"FCM send result: user_id={user.id}, "
+                                f"device_code={device_code}, success={sent}"
+                            )
 
                         db.add(FallEvent(
                             time=time.ctime(),

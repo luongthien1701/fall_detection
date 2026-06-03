@@ -29,11 +29,19 @@ void main() async {
     sound: true,
   );
 
+  final authProvider = AuthProvider();
+  await authProvider.restoreSession();
+  final fcmProvider = FcmProvider();
+  final fcmToken = await FirebaseMessaging.instance.getToken();
+  if (fcmToken != null) {
+    fcmProvider.setToken(fcmToken);
+  }
+
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => FcmProvider()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider.value(value: fcmProvider),
+        ChangeNotifierProvider.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => DeviceProvider()),
         ChangeNotifierProxyProvider<DeviceProvider, MqttProvider>(
           create: (_) => MqttProvider(),
@@ -47,7 +55,10 @@ void main() async {
     ),
   );
 
-  FcmService.init(FcmService.navigatorKey);
+  await FcmService.init(
+    FcmService.navigatorKey,
+    canHandleAlert: () => authProvider.isLogin,
+  );
   WidgetsBinding.instance.addPostFrameCallback((_) {
     FcmService.openPendingRoute();
   });
@@ -60,7 +71,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: FcmService.navigatorKey,
       debugShowCheckedModeBanner: false,
-      initialRoute: '/login',
+      initialRoute: context.read<AuthProvider>().isLogin ? '/hub' : '/login',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),

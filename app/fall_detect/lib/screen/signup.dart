@@ -14,7 +14,6 @@ class _SignupWidgetState extends State<SignupWidget> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
@@ -67,17 +66,6 @@ class _SignupWidgetState extends State<SignupWidget> {
                       ),
                     ),
                     SizedBox(height: 40),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                      child: TextField(
-                        controller: _firstNameController,
-                        decoration: InputDecoration(
-                          labelText: "First Name",
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 20),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20.0),
                       child: TextField(
@@ -144,7 +132,6 @@ class _SignupWidgetState extends State<SignupWidget> {
                         final email = _emailController.text;
                         final password = _passwordController.text;
                         final phone = _phoneController.text;
-                        final firstName = _firstNameController.text;
                         if (password != _confirmPasswordController.text) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text("Passwords do not match!")),
@@ -152,7 +139,6 @@ class _SignupWidgetState extends State<SignupWidget> {
                           return;
                         }
                         final mess = await context.read<AuthProvider>().signup(
-                          firstName,
                           email,
                           password,
                           phone,
@@ -168,7 +154,7 @@ class _SignupWidgetState extends State<SignupWidget> {
                         }
                         Future.delayed(Duration(seconds: 1), () {
                           if (!context.mounted) return;
-                          Navigator.pushNamed(context, '/login');
+                          Navigator.pushReplacementNamed(context, '/hub');
                         });
                       },
                       child: Padding(

@@ -95,9 +95,14 @@ class _DeviceConnectWidgetState extends State<DeviceConnectWidget> {
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () {
-                  context.read<AuthProvider>().logout();
-                  Navigator.pushReplacementNamed(context, '/login');
+                onPressed: () async {
+                  final authProvider = context.read<AuthProvider>();
+                  final deviceProvider = context.read<DeviceProvider>();
+                  final navigator = Navigator.of(context);
+                  await authProvider.logout();
+                  if (!mounted) return;
+                  deviceProvider.setDeviceCode(null);
+                  navigator.pushReplacementNamed('/login');
                 },
                 child: const Text("Đăng xuất"),
               ),

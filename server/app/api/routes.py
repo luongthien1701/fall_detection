@@ -62,12 +62,10 @@ def find_user_by_email(db: Session, email: str):
 
 
 def user_payload(user: User):
-    app_phone = user.app_phone or user.phone
     return {
         "user_id": user.id,
-        "firstname": user.firstname,
-        "app_phone": app_phone,
-        "phone": app_phone,
+        "email": user.email,
+        "phone": user.phone,
         "relative_phone_1": user.relative_phone_1,
         "relative_phone_2": user.relative_phone_2,
     }
@@ -146,10 +144,8 @@ def register(data: dict = Body(...), db: Session = Depends(get_db)):
         return {"success": False, "message": "Email already exists"}
 
     user = User(
-        firstname=data.get("firstname"),
         email=email,
         password=hash_password(password),
-        app_phone=data.get("app_phone") or data.get("phone"),
         phone=data.get("phone"),
         relative_phone_1=data.get("relative_phone_1"),
         relative_phone_2=data.get("relative_phone_2"),
@@ -220,14 +216,8 @@ def update_user(data: dict = Body(...), db: Session = Depends(get_db)):
     if not user:
         return {"success": False, "message": "User not found"}
 
-    if "firstname" in data:
-        user.firstname = data.get("firstname")
-    if "app_phone" in data:
-        user.app_phone = data.get("app_phone")
     if "phone" in data:
         user.phone = data.get("phone")
-        if "app_phone" not in data:
-            user.app_phone = data.get("phone")
     if "relative_phone_1" in data:
         user.relative_phone_1 = data.get("relative_phone_1")
     if "relative_phone_2" in data:

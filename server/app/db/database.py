@@ -25,7 +25,6 @@ def ensure_schema():
             "last_update": "ALTER TABLE devices ADD COLUMN last_update FLOAT",
         },
         "users": {
-            "app_phone": "ALTER TABLE users ADD COLUMN app_phone VARCHAR",
             "relative_phone_1": "ALTER TABLE users ADD COLUMN relative_phone_1 VARCHAR",
             "relative_phone_2": "ALTER TABLE users ADD COLUMN relative_phone_2 VARCHAR",
         },
@@ -51,10 +50,10 @@ def ensure_schema():
             if {"app_phone", "phone"}.issubset(existing_user_columns):
                 conn.execute(text("""
                     UPDATE users
-                    SET app_phone = phone
-                    WHERE (app_phone IS NULL OR app_phone = '')
-                      AND phone IS NOT NULL
-                      AND phone != ''
+                    SET phone = app_phone
+                    WHERE (phone IS NULL OR phone = '')
+                      AND app_phone IS NOT NULL
+                      AND app_phone != ''
                 """))
 
         users_has_legacy_device_code = False

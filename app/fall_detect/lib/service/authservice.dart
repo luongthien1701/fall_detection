@@ -37,21 +37,18 @@ class Authservice {
   }
 
   Future<Map<String, dynamic>> signup(
-    String firstname,
     String email,
     String password,
-    String appPhone,
+    String phone,
     String fcmToken,
   ) async {
     final response = await http.post(
       Uri.parse('${Ip.ip}/api/auth/signup'),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        'firstname': firstname,
         'email': email,
         'password': password,
-        'app_phone': appPhone,
-        'phone': appPhone,
+        'phone': phone,
         'fcm_token': fcmToken,
       }),
     );
@@ -62,8 +59,7 @@ class Authservice {
 
   Future<Map<String, dynamic>> updateUser(
     int userId,
-    String firstname,
-    String appPhone,
+    String phone,
     String relativePhone1,
     String relativePhone2,
   ) async {
@@ -72,9 +68,7 @@ class Authservice {
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
         'user_id': userId,
-        'firstname': firstname,
-        'app_phone': appPhone,
-        'phone': appPhone,
+        'phone': phone,
         'relative_phone_1': relativePhone1,
         'relative_phone_2': relativePhone2,
       }),

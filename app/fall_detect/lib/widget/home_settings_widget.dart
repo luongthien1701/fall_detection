@@ -21,7 +21,6 @@ class AppSettingsWidget extends StatefulWidget {
 }
 
 class _AppSettingsWidgetState extends State<AppSettingsWidget> {
-  final TextEditingController _firstnameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _relativePhone1Controller =
       TextEditingController();
@@ -51,8 +50,7 @@ class _AppSettingsWidgetState extends State<AppSettingsWidget> {
     if (_initialized) return;
 
     final authProvider = context.read<AuthProvider>();
-    _firstnameController.text = authProvider.firstname;
-    _phoneController.text = authProvider.appPhone;
+    _phoneController.text = authProvider.phone;
     _relativePhone1Controller.text = authProvider.relativePhone1;
     _relativePhone2Controller.text = authProvider.relativePhone2;
     _initialized = true;
@@ -60,7 +58,6 @@ class _AppSettingsWidgetState extends State<AppSettingsWidget> {
 
   @override
   void dispose() {
-    _firstnameController.dispose();
     _phoneController.dispose();
     _relativePhone1Controller.dispose();
     _relativePhone2Controller.dispose();
@@ -68,14 +65,13 @@ class _AppSettingsWidgetState extends State<AppSettingsWidget> {
   }
 
   Future<void> _saveUserInfo() async {
-    final firstname = _firstnameController.text.trim();
     final phone = _phoneController.text.trim();
     final relativePhone1 = _relativePhone1Controller.text.trim();
     final relativePhone2 = _relativePhone2Controller.text.trim();
 
-    if (firstname.isEmpty || phone.isEmpty) {
+    if (phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Vui lòng nhập tên và số điện thoại")),
+        const SnackBar(content: Text("Vui lòng nhập số điện thoại")),
       );
       return;
     }
@@ -94,7 +90,6 @@ class _AppSettingsWidgetState extends State<AppSettingsWidget> {
     });
 
     final message = await context.read<AuthProvider>().updateUserInfo(
-      firstname,
       phone,
       relativePhone1,
       relativePhone2,
@@ -121,15 +116,15 @@ class _AppSettingsWidgetState extends State<AppSettingsWidget> {
     await widget.onDeviceBackgroundChanged(color);
   }
 
-  void _logout() {
-    context.read<AuthProvider>().logout();
+  Future<void> _logout() async {
+    await context.read<AuthProvider>().logout();
+    if (!mounted) return;
     context.read<DeviceProvider>().setDeviceCode(null);
     Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
   }
 
   bool get _hasRequiredInfo {
-    return _firstnameController.text.trim().isNotEmpty &&
-        _phoneController.text.trim().isNotEmpty &&
+    return _phoneController.text.trim().isNotEmpty &&
         (_relativePhone1Controller.text.trim().isNotEmpty ||
             _relativePhone2Controller.text.trim().isNotEmpty);
   }
@@ -226,14 +221,6 @@ class _AppSettingsWidgetState extends State<AppSettingsWidget> {
                     text: "Thông tin",
                   ),
                   const SizedBox(height: 14),
-                  TextField(
-                    controller: _firstnameController,
-                    decoration: const InputDecoration(
-                      labelText: "Tên",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   TextField(
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,

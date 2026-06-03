@@ -11,6 +11,14 @@ SCOPES = ["https://www.googleapis.com/auth/firebase.messaging"]
 credentials = None
 
 
+def _mask_token(token):
+    if not token:
+        return "<empty>"
+    if len(token) <= 16:
+        return f"{token[:4]}...{token[-4:]}"
+    return f"{token[:12]}...{token[-8:]}"
+
+
 def _find_service_account_file():
     root_dir = Path(__file__).resolve().parents[3]
     server_dir = Path(__file__).resolve().parents[2]
@@ -41,6 +49,10 @@ def _get_credentials():
 
 def send_fcm(user_token, body_text, device_code=None):
     try:
+        if not user_token:
+            print("FCM skipped: empty user token")
+            return False
+
         # refresh token
         creds = _get_credentials()
         creds.refresh(Request())
@@ -79,8 +91,19 @@ def send_fcm(user_token, body_text, device_code=None):
         }
 
         res = requests.post(FCM_URL, headers=headers, json=payload)
+        ok = 200 <= res.status_code < 300
 
-        print("FCM:", res.status_code, res.text)
+        print(
+            "FCM:",
+            res.status_code,
+            res.text,
+            "token=",
+            _mask_token(user_token),
+            "device_code=",
+            device_code,
+        )
+        return ok
 
     except Exception as e:
         print("FCM error:", e)
+        return False
