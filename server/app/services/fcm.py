@@ -39,7 +39,7 @@ def _get_credentials():
         )
     return credentials
 
-def send_fcm(user_token, body_text):
+def send_fcm(user_token, body_text, device_code=None):
     try:
         # refresh token
         creds = _get_credentials()
@@ -58,8 +58,17 @@ def send_fcm(user_token, body_text):
                     "title": "Alert",
                     "body": body_text
                 },
+                "data": {
+                    "type": "fall_alert",
+                    "route": "/hazardous",
+                    "device_code": device_code or "",
+                    "click_action": "FLUTTER_NOTIFICATION_CLICK",
+                },
                 "android": {
-                    "priority": "HIGH"
+                    "priority": "HIGH",
+                    "notification": {
+                        "click_action": "FLUTTER_NOTIFICATION_CLICK",
+                    },
                 },
                 "apns": {
                     "headers": {

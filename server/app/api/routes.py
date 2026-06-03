@@ -3,6 +3,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from app.core import state
 from app.db.database import SessionLocal
 from app.db.model import Device, FallEvent, UserDevice
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db.model import User
 from app.services.auth_service import hash_password, verify_password
@@ -46,6 +47,18 @@ def get_or_create_device(db: Session, device_code: str):
     db.add(device)
     db.flush()
     return device
+
+
+def normalize_email(value):
+    return (value or "").strip().lower()
+
+
+def find_user_by_email(db: Session, email: str):
+    return (
+        db.query(User)
+        .filter(func.lower(func.trim(User.email)) == normalize_email(email))
+        .first()
+    )
 
 
 def user_payload(user: User):
@@ -123,13 +136,13 @@ def get_db():
 @router.post("/api/auth/signup")
 def register(data: dict = Body(...), db: Session = Depends(get_db)):
     print("Register data:", data)
-    email = data.get("email")
+    email = normalize_email(data.get("email"))
     password = data.get("password")
 
     if not email or not password:
         return {"success": False, "message": "Email and password are required"}
 
-    if db.query(User).filter(User.email == email).first():
+    if find_user_by_email(db, email):
         return {"success": False, "message": "Email already exists"}
 
     user = User(
@@ -156,10 +169,10 @@ def register(data: dict = Body(...), db: Session = Depends(get_db)):
 
 @router.post("/api/auth/login")
 def login(data: dict = Body(...), db: Session = Depends(get_db)):
-    email = data.get("email")
+    email = normalize_email(data.get("email"))
     password = data.get("password")
 
-    user = db.query(User).filter(User.email == email).first()
+    user = find_user_by_email(db, email)
 
     if not user:
         return {"success": False, "message": "User not found"}
@@ -179,6 +192,22 @@ def login(data: dict = Body(...), db: Session = Depends(get_db)):
         "device_code": selected_device_code,
         "device_codes": device_codes,
     }
+
+
+@router.post("/api/auth/logout")
+def logout(data: dict = Body(...), db: Session = Depends(get_db)):
+    user_id = data.get("user_id")
+    if not user_id:
+        return {"success": False, "message": "User is required"}
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"success": False, "message": "User not found"}
+
+    user.fcm_token = None
+    db.commit()
+
+    return {"success": True, "message": "Logout successful"}
 
 
 @router.post("/api/user/update")

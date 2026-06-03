@@ -127,27 +127,31 @@ def handler(data):
                 if now - state.device_last_alert_time[device_code] > ALERT_COOLDOWN:
 
                     db = SessionLocal()
-                    users = (
-                        db.query(User)
-                        .join(UserDevice, UserDevice.user_id == User.id)
-                        .join(Device, Device.id == UserDevice.device_id)
-                        .filter(Device.code == device_code)
-                        .all()
-                    )
+                    try:
+                        users = (
+                            db.query(User)
+                            .join(UserDevice, UserDevice.user_id == User.id)
+                            .join(Device, Device.id == UserDevice.device_id)
+                            .filter(Device.code == device_code)
+                            .filter(User.fcm_token.isnot(None))
+                            .filter(User.fcm_token != "")
+                            .distinct()
+                            .all()
+                        )
 
-                    message = f"Fall detected!"
+                        message = f"Fall detected!"
 
-                    for user in users:
-                        if user.fcm_token:
-                            send_fcm(user.fcm_token, message)
+                        for user in users:
+                            send_fcm(user.fcm_token, message, device_code)
 
-                    db.add(FallEvent(
-                        time=time.ctime(),
-                        total_a=row[6],
-                        device_code=device_code,
-                    ))
-                    db.commit()
-                    db.close()
+                        db.add(FallEvent(
+                            time=time.ctime(),
+                            total_a=row[6],
+                            device_code=device_code,
+                        ))
+                        db.commit()
+                    finally:
+                        db.close()
 
                     if mqtt_client:
                         mqtt_client.publish(
