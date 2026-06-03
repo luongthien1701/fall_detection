@@ -8,16 +8,15 @@ from sklearn.model_selection import train_test_split
 
 
 RANDOM_STATE = 42
-TEST_SIZE = 0.25
+TEST_SIZE = 0.2
 MIN_ROWS = 15
-VALIDATION_TIME_CUTOFF = 1800000000.0
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FALL_DIR = PROJECT_ROOT / "dataset" / "split" / "fall"
 NORMAL_DIR = PROJECT_ROOT / "dataset" / "split" / "normal"
 
-MODEL_FILE = PROJECT_ROOT / "demo" / "falldetact_model.pkl"
-SERVER_MODEL_FILE = PROJECT_ROOT / "demo" / "fall_model.pkl"
+MODEL_FILE = PROJECT_ROOT / "dataset" / "falldetact_model.pkl"
+SERVER_MODEL_FILE = PROJECT_ROOT / "server" / "model" / "fall_model.pkl"
 
 COLUMNS = [
     "time",
@@ -88,9 +87,6 @@ def extract_features_from_event(df):
     return feat
 
 
-def is_validation_event(df):
-    return df["time"].iloc[0] < VALIDATION_TIME_CUTOFF
-
 
 def build_feature_frame(directory, prefix, label):
     rows = []
@@ -103,7 +99,6 @@ def build_feature_frame(directory, prefix, label):
 
         feat = extract_features_from_event(df)
         feat["source_file"] = str(file_path)
-        feat["use_for_validation"] = is_validation_event(df)
         feat["label"] = label
         rows.append(feat)
 
@@ -118,13 +113,13 @@ def main():
     if data_df.empty:
         raise ValueError("No training data found in dataset/split.")
 
-    validation_df = data_df[data_df["use_for_validation"]].reset_index(drop=True)
+    validation_df = data_df.reset_index(drop=True)
 
     if validation_df.empty:
         raise ValueError("No validation data found.")
 
     validation_feature_df = validation_df.drop(
-        columns=["label", "source_file", "use_for_validation"]
+        columns=["label", "source_file"]
     ).fillna(0)
     validation_label_series = validation_df["label"]
 
@@ -142,11 +137,12 @@ def main():
     print(f"Test samples: {len(X_test)}")
 
     model = RandomForestClassifier(
-        n_estimators=600,
+        n_estimators=2000,
         max_depth=15,
-        min_samples_leaf=2,
+        min_samples_leaf=3,
         class_weight="balanced",
         random_state=RANDOM_STATE,
+        n_jobs=-1,
     )
 
     model.fit(X_train, y_train)
@@ -161,10 +157,13 @@ def main():
     print(classification_report(y_test, pred))
 
     final_feature_df = data_df.drop(
-        columns=["label", "source_file", "use_for_validation"]
+        columns=["label", "source_file"]
     ).fillna(0)
     final_label_series = data_df["label"]
     model.fit(final_feature_df, final_label_series)
+
+    MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SERVER_MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     joblib.dump(model, MODEL_FILE)
     joblib.dump(model, SERVER_MODEL_FILE)
