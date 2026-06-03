@@ -1,4 +1,5 @@
 import 'package:fall_detect/provider/device_provider.dart';
+import 'package:fall_detect/service/fcm_service.dart';
 import 'package:fall_detect/service/mqtt_service.dart';
 import 'package:flutter/material.dart';
 
@@ -45,6 +46,9 @@ class MqttProvider extends ChangeNotifier {
       if (topic.contains("esp32/fall_detection/events")) {
         if (_isCurrentDeviceMessage(msg)) {
           await _deviceProvider?.getHistory();
+          if (_isFallDetectedMessage(msg)) {
+            FcmService.openHazardous();
+          }
         }
       }
     });
@@ -58,6 +62,15 @@ class MqttProvider extends ChangeNotifier {
 
     final messageDeviceCode = msg.split(',').first.trim();
     return messageDeviceCode == deviceCode;
+  }
+
+  bool _isFallDetectedMessage(String msg) {
+    final parts = msg.split(',');
+    if (parts.length < 2) {
+      return false;
+    }
+
+    return parts[1].trim() == "fall_detected";
   }
 
   void publish(String topic, String msg) {

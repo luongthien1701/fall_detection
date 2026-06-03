@@ -1,161 +1,176 @@
-import os
+from pathlib import Path
 
+import joblib
 import pandas as pd
-import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-import joblib
+from sklearn.model_selection import train_test_split
 
-WINDOW_SIZE = 25
-STEP = 10
 
-columns = [
-"time","AccelX","AccelY","AccelZ",
-"GyroX","GyroY","GyroZ","Total_A"
+RANDOM_STATE = 42
+TEST_SIZE = 0.25
+MIN_ROWS = 15
+VALIDATION_TIME_CUTOFF = 1800000000.0
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FALL_DIR = PROJECT_ROOT / "dataset" / "split" / "fall"
+NORMAL_DIR = PROJECT_ROOT / "dataset" / "split" / "normal"
+
+MODEL_FILE = PROJECT_ROOT / "demo" / "falldetact_model.pkl"
+SERVER_MODEL_FILE = PROJECT_ROOT / "demo" / "fall_model.pkl"
+
+COLUMNS = [
+    "time",
+    "AccelX",
+    "AccelY",
+    "AccelZ",
+    "GyroX",
+    "GyroY",
+    "GyroZ",
+    "Total_A",
 ]
 
+SENSOR_COLUMNS = COLUMNS[1:]
+AXIS_COLUMNS = ["AccelX", "AccelY", "AccelZ", "GyroX", "GyroY", "GyroZ"]
 
-# ==============================
-# đọc csv
-# ==============================
-def load_data(file):
 
-    df = pd.read_csv(file)
-
-    df = df[[
-        "time",
-        "AccelX",
-        "AccelY",
-        "AccelZ",
-        "GyroX",
-        "GyroY",
-        "GyroZ",
-        "Total_A"
-    ]]
-
+def load_event(file_path):
+    df = pd.read_csv(file_path)
+    df = df[COLUMNS]
+    df = df.dropna(subset=COLUMNS).reset_index(drop=True)
     return df
 
 
-# ==============================
-# sliding window
-# ==============================
-def create_segments(df):
+def list_event_files(directory, prefix):
+    files = []
 
-    segments = []
+    for file_path in sorted(directory.glob(f"{prefix}_*.csv")):
+        suffix = file_path.stem.removeprefix(f"{prefix}_")
 
-    for i in range(0, len(df) - WINDOW_SIZE, STEP):
+        if suffix.isdigit():
+            files.append(file_path)
 
-        seg = df.iloc[i:i+WINDOW_SIZE]
-
-        if len(seg) == WINDOW_SIZE:
-            segments.append(seg)
-
-    return segments
+    return files
 
 
-# ==============================
-# feature extraction
-# ==============================
-def extract_features(segments, label):
+def extract_features_from_event(df):
+    feat = {
+        "rows": len(df),
+        "duration": df["time"].iloc[-1] - df["time"].iloc[0],
+    }
 
-    features = []
+    for col in SENSOR_COLUMNS:
+        feat[f"{col}_mean"] = df[col].mean()
+        feat[f"{col}_std"] = df[col].std()
+        feat[f"{col}_max"] = df[col].max()
+        feat[f"{col}_min"] = df[col].min()
+        feat[f"{col}_range"] = df[col].max() - df[col].min()
+        feat[f"{col}_median"] = df[col].median()
 
-    for seg in segments:
+    gyro_abs = df[["GyroX", "GyroY", "GyroZ"]].abs()
+    accel_abs = df[["AccelX", "AccelY", "AccelZ"]].abs()
 
-        feat = {}
+    feat["A_peak"] = df["Total_A"].max()
+    feat["A_mean"] = df["Total_A"].mean()
+    feat["A_std"] = df["Total_A"].std()
+    feat["A_range"] = df["Total_A"].max() - df["Total_A"].min()
+    feat["A_min"] = df["Total_A"].min()
+    feat["A_peak_index_ratio"] = df["Total_A"].idxmax() / max(len(df) - 1, 1)
+    feat["gyro_abs_peak"] = gyro_abs.max(axis=1).max()
+    feat["gyro_abs_mean"] = gyro_abs.max(axis=1).mean()
+    feat["accel_abs_peak"] = accel_abs.max(axis=1).max()
 
-        for col in columns[1:]:
+    for col in AXIS_COLUMNS:
+        feat[f"{col}_first"] = df[col].iloc[0]
+        feat[f"{col}_last"] = df[col].iloc[-1]
+        feat[f"{col}_delta"] = df[col].iloc[-1] - df[col].iloc[0]
 
-            feat[col+"_mean"] = seg[col].mean()
-            feat[col+"_std"] = seg[col].std()
-            feat[col+"_max"] = seg[col].max()
-            feat[col+"_min"] = seg[col].min()
+    return feat
 
-            feat[col+"_range"] = seg[col].max() - seg[col].min()
 
-        # feature quan trọng cho fall
-        feat["A_peak"] = seg["Total_A"].max()
-        feat["A_mean"] = seg["Total_A"].mean()
-        feat["A_std"] = seg["Total_A"].std()
-        feat["A_range"] = seg["Total_A"].max() - seg["Total_A"].min()
-        feat["A_min"] = seg["Total_A"].min()
+def is_validation_event(df):
+    return df["time"].iloc[0] < VALIDATION_TIME_CUTOFF
 
+
+def build_feature_frame(directory, prefix, label):
+    rows = []
+
+    for file_path in list_event_files(directory, prefix):
+        df = load_event(file_path)
+
+        if len(df) < MIN_ROWS:
+            continue
+
+        feat = extract_features_from_event(df)
+        feat["source_file"] = str(file_path)
+        feat["use_for_validation"] = is_validation_event(df)
         feat["label"] = label
+        rows.append(feat)
 
-        features.append(feat)
-
-    pd.DataFrame(features).to_csv("features.csv", index=False)
-    return pd.DataFrame(features)
+    return pd.DataFrame(rows)
 
 
-# ==============================
-# TRAIN DATA
-# ==============================
-fall_train = create_segments(load_data("dataset/fall_train.csv"))
-normal_train = create_segments(load_data("dataset/normal_train.csv"))
+def main():
+    fall_df = build_feature_frame(FALL_DIR, "fall", 1)
+    normal_df = build_feature_frame(NORMAL_DIR, "normal", 0)
+    data_df = pd.concat([fall_df, normal_df], ignore_index=True)
 
-print("Train fall segments:",len(fall_train))
-print("Train normal segments:",len(normal_train))
+    if data_df.empty:
+        raise ValueError("No training data found in dataset/split.")
 
-fall_train_df = extract_features(fall_train,1)
-normal_train_df = extract_features(normal_train,0)
+    validation_df = data_df[data_df["use_for_validation"]].reset_index(drop=True)
 
-train_df = pd.concat([fall_train_df,normal_train_df],ignore_index=True)
+    if validation_df.empty:
+        raise ValueError("No validation data found.")
 
-X_train = train_df.drop(columns=["label"])
-y_train = train_df["label"]
+    validation_feature_df = validation_df.drop(
+        columns=["label", "source_file", "use_for_validation"]
+    ).fillna(0)
+    validation_label_series = validation_df["label"]
 
+    X_train, X_test, y_train, y_test = train_test_split(
+        validation_feature_df,
+        validation_label_series,
+        test_size=TEST_SIZE,
+        random_state=RANDOM_STATE,
+        stratify=validation_label_series,
+    )
 
-# ==============================
-# TEST DATA
-# ==============================
-fall_test = create_segments(load_data("dataset/fall_test.csv"))
-normal_test = create_segments(load_data("dataset/normal_test.csv"))
+    print("\nDataset:")
+    print(data_df["label"].value_counts().rename({0: "normal", 1: "fall"}))
+    print(f"Train samples: {len(X_train)}")
+    print(f"Test samples: {len(X_test)}")
 
-print("Test fall segments:",len(fall_test))
-print("Test normal segments:",len(normal_test))
+    model = RandomForestClassifier(
+        n_estimators=600,
+        max_depth=15,
+        min_samples_leaf=2,
+        class_weight="balanced",
+        random_state=RANDOM_STATE,
+    )
 
-fall_test_df = extract_features(fall_test,1)
-normal_test_df = extract_features(normal_test,0)
+    model.fit(X_train, y_train)
+    pred = model.predict(X_test)
 
-test_df = pd.concat([fall_test_df,normal_test_df],ignore_index=True)
+    print("\nAccuracy:", accuracy_score(y_test, pred))
 
-X_test = test_df.drop(columns=["label"])
-y_test = test_df["label"]
+    print("\nConfusion Matrix:")
+    print(confusion_matrix(y_test, pred))
 
+    print("\nClassification Report:")
+    print(classification_report(y_test, pred))
 
-# ==============================
-# TRAIN MODEL
-# ==============================
-model = RandomForestClassifier(
+    final_feature_df = data_df.drop(
+        columns=["label", "source_file", "use_for_validation"]
+    ).fillna(0)
+    final_label_series = data_df["label"]
+    model.fit(final_feature_df, final_label_series)
 
-    n_estimators=600,
-    max_depth=15,
-    min_samples_leaf=2,
-    class_weight="balanced",
-    random_state=42
-)
-
-model.fit(X_train,y_train)
-
-
-# ==============================
-# TEST MODEL
-# ==============================
-pred = model.predict(X_test)
-
-print("\nAccuracy:",accuracy_score(y_test,pred))
-
-print("\nConfusion Matrix:")
-print(confusion_matrix(y_test,pred))
-
-print("\nClassification Report:")
-print(classification_report(y_test,pred))
+    joblib.dump(model, MODEL_FILE)
+    joblib.dump(model, SERVER_MODEL_FILE)
+    print(f"\nModel saved: {MODEL_FILE}")
+    print(f"Server model saved: {SERVER_MODEL_FILE}")
 
 
-# ==============================
-# SAVE MODEL
-# ==============================
-model_path = os.path.join(os.path.dirname(__file__), "falldetact_model.pkl")
-joblib.dump(model, model_path)
-print(f"Model saved: {model_path}")
+if __name__ == "__main__":
+    main()

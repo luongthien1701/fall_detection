@@ -121,6 +121,11 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void logout() {
+    final userId = _userId;
+    if (userId != -1) {
+      Authservice().logout(userId);
+    }
+
     _userId = -1;
     _deviceCode = null;
     _deviceCodes = [];

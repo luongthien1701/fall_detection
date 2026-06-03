@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import threading
 
 import uvicorn
@@ -8,15 +9,9 @@ from app.db.database import Base, engine, ensure_schema
 from app.mqtt.mqtt_handle import start_mqtt, handler
 from app.mqtt.worker import monitor_timeout
 
-app = FastAPI()
 services_started = False
 
-Base.metadata.create_all(bind=engine)
-ensure_schema()
-app.include_router(router)
 
-
-@app.on_event("startup")
 def start_background_services():
     global services_started
     if services_started:
@@ -25,6 +20,19 @@ def start_background_services():
     start_mqtt(handler)
     threading.Thread(target=monitor_timeout, daemon=True).start()
     services_started = True
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_background_services()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+Base.metadata.create_all(bind=engine)
+ensure_schema()
+app.include_router(router)
 
 
 if __name__ == "__main__":

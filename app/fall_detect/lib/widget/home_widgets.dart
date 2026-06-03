@@ -29,10 +29,10 @@ class DeviceHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          _HeaderIconButton(icon: Icons.more_vert, onPressed: onSettings),
           const SizedBox(width: 8),
           _HeaderIconButton(icon: Icons.add_circle_outline, onPressed: onAdd),
+          const SizedBox(width: 12),
+          _HeaderIconButton(icon: Icons.more_vert, onPressed: onSettings),
         ],
       ),
     );

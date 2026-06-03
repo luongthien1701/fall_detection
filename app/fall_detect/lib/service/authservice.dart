@@ -24,6 +24,18 @@ class Authservice {
     return data;
   }
 
+  Future<Map<String, dynamic>> logout(int userId) async {
+    final response = await http.post(
+      Uri.parse('${Ip.ip}/api/auth/logout'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({'user_id': userId}),
+    );
+
+    final data = jsonDecode(response.body);
+
+    return data;
+  }
+
   Future<Map<String, dynamic>> signup(
     String firstname,
     String email,
