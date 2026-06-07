@@ -16,7 +16,7 @@ def predict(X):
     return int(model.predict(X)[0])
 
 
-def predict_with_proba(X, threshold=0.8):
+def predict_with_proba(X, threshold=0.7):
     """
     threshold càng cao thì càng khó báo té ngã.
     0.75: nhạy

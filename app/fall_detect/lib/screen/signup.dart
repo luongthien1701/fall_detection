@@ -43,6 +43,7 @@ class _SignupWidgetState extends State<SignupWidget> {
               ),
               Container(
                 width: double.infinity,
+                height: MediaQuery.of(context).size.height - 60,
                 decoration: BoxDecoration(
                   color: const Color.fromARGB(255, 218, 213, 213),
                 ),

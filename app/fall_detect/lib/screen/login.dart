@@ -93,7 +93,7 @@ class _LoginWidgetState extends State<LoginWidget> {
                               TextField(
                                 controller: _emailController,
                                 decoration: InputDecoration(
-                                  labelText: "Username",
+                                  labelText: "Email",
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(5),
                                   ),

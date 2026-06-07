@@ -16,7 +16,7 @@ from app.config import (
     STEP_SIZE,
     WINDOW_SIZE,
 )
-from app.services.feature_service import extract_features, columns
+from app.services.feature_service import extract_features, COLUMNS
 from app.services.model_service import predict
 from app.services.fcm import send_fcm
 from app.db.database import SessionLocal
@@ -117,7 +117,7 @@ def handler(data):
 
         if len(device_queue) >= WINDOW_SIZE:
 
-            df = pd.DataFrame(list(device_queue)[:WINDOW_SIZE], columns=columns)
+            df = pd.DataFrame(list(device_queue)[:WINDOW_SIZE], columns=COLUMNS)
             pred = predict(extract_features(df))
 
             if pred == 1:
