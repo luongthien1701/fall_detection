@@ -1,0 +1,3 @@
+﻿model,accuracy,precision_fall,recall_fall,f1_fall,log_loss,tn_normal_correct,fp_normal_as_fall,fn_fall_missed,tp_fall_correct,model_file,confusion_matrix_file
+Random Forest,0.9227941176470589,1.0,0.8,0.8888888888888888,0.07082251355687484,167,0,21,84,D:\Learn\TTNT\train\random_forest_model.pkl,D:\Learn\TTNT\train\confusion_matrix_random_forest.png
+Gradient Boosting,0.9742647058823529,1.0,0.9333333333333333,0.9655172413793104,0.09137374808650307,167,0,7,98,D:\Learn\TTNT\train\gradient_boosting_model.pkl,D:\Learn\TTNT\train\confusion_matrix_gradient_boosting.png

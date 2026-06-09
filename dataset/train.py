@@ -3,42 +3,45 @@ from pathlib import Path
 import joblib
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.ensemble import (      
+    GradientBoostingClassifier,
+    RandomForestClassifier,
+)
 
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
     classification_report,
     confusion_matrix,
     ConfusionMatrixDisplay,
     log_loss,
 )
+
 from sklearn.model_selection import train_test_split
 
 
 RANDOM_STATE = 42
-TEST_SIZE = 0.3
+TEST_SIZE = 0.25
 MIN_ROWS = 15
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Folder hiện tại
+CURRENT_DIR = Path(__file__).resolve().parent
 
-FALL_DIR = PROJECT_ROOT / "dataset" / "split" / "fall"
-NORMAL_DIR = PROJECT_ROOT / "dataset" / "split" / "normal"
+FALL_DIR = CURRENT_DIR / "split" / "fall"
+NORMAL_DIR = CURRENT_DIR / "split" / "normal"
 
-MODEL_FILE = PROJECT_ROOT / "dataset" / "falldetact_model.pkl"
-SERVER_MODEL_FILE = PROJECT_ROOT / "server" / "model" / "fall_model.pkl"
+MODEL_FILE = CURRENT_DIR / "falldetact_model.pkl"
+SERVER_MODEL_FILE = CURRENT_DIR / "fall_model.pkl"
 
-OUTPUT_DIR = PROJECT_ROOT / "dataset" / "train_outputs"
+FEATURE_FILE = CURRENT_DIR / "features.csv"
+TRAIN_FEATURE_FILE = CURRENT_DIR / "train_features.csv"
+TEST_FEATURE_FILE = CURRENT_DIR / "test_features.csv"
 
-FEATURE_FILE = OUTPUT_DIR / "features.csv"
-TRAIN_FEATURE_FILE = OUTPUT_DIR / "train_features.csv"
-TEST_FEATURE_FILE = OUTPUT_DIR / "test_features.csv"
+RESULT_FILE = CURRENT_DIR / "model_comparison.csv"
 
-METRICS_FILE = OUTPUT_DIR / "metrics_summary.csv"
-REPORT_FILE = OUTPUT_DIR / "classification_report.csv"
-
-ACCURACY_CHART_FILE = OUTPUT_DIR / "accuracy_chart.png"
-LOSS_CHART_FILE = OUTPUT_DIR / "loss_chart.png"
-CONFUSION_MATRIX_FILE = OUTPUT_DIR / "confusion_matrix.png"
+FALL_THRESHOLD = 0.85
 
 COLUMNS = [
     "time",
@@ -57,8 +60,10 @@ AXIS_COLUMNS = ["AccelX", "AccelY", "AccelZ", "GyroX", "GyroY", "GyroZ"]
 
 def load_event(file_path):
     df = pd.read_csv(file_path)
+
     df = df[COLUMNS]
     df = df.dropna(subset=COLUMNS).reset_index(drop=True)
+
     return df
 
 
@@ -101,6 +106,7 @@ def extract_features_from_event(df):
     feat["gyro_abs_peak"] = gyro_abs.max(axis=1).max()
     feat["gyro_abs_mean"] = gyro_abs.max(axis=1).mean()
     feat["accel_abs_peak"] = accel_abs.max(axis=1).max()
+    feat["accel_abs_mean"] = accel_abs.max(axis=1).mean()
 
     for col in AXIS_COLUMNS:
         feat[f"{col}_first"] = df[col].iloc[0]
@@ -113,35 +119,45 @@ def extract_features_from_event(df):
 def build_feature_frame(directory, prefix, label):
     rows = []
 
-    for file_path in list_event_files(directory, prefix):
+    files = list_event_files(directory, prefix)
+
+    print(f"\nReading {prefix} files from: {directory}")
+    print(f"Found files: {len(files)}")
+
+    for file_path in files:
         df = load_event(file_path)
 
         if len(df) < MIN_ROWS:
             continue
 
         feat = extract_features_from_event(df)
-        feat["source_file"] = str(file_path)
+        feat["source_file"] = file_path.name
         feat["label"] = label
+
         rows.append(feat)
 
     return pd.DataFrame(rows)
 
 
-def create_model(n_estimators=2000):
-    return RandomForestClassifier(
-        n_estimators=n_estimators,
-        max_depth=15,
-        min_samples_leaf=5,
-        class_weight={0: 1, 1: 2.2},
-        random_state=RANDOM_STATE,
-    )
+def build_dataset_from_split():
+    fall_df = build_feature_frame(FALL_DIR, "fall", 1)
+    normal_df = build_feature_frame(NORMAL_DIR, "normal", 0)
+
+    data_df = pd.concat([fall_df, normal_df], ignore_index=True)
+
+    if data_df.empty:
+        raise ValueError("No training data found in split/fall or split/normal.")
+
+    return data_df
 
 
 def save_feature_csv(data_df):
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
     export_df = data_df.copy()
-    export_df["label_name"] = export_df["label"].map({0: "normal", 1: "fall"})
+
+    export_df["label_name"] = export_df["label"].map({
+        0: "normal",
+        1: "fall",
+    })
 
     export_df.to_csv(FEATURE_FILE, index=False, encoding="utf-8-sig")
 
@@ -151,11 +167,17 @@ def save_feature_csv(data_df):
 def save_train_test_csv(X_train, X_test, y_train, y_test):
     train_df = X_train.copy()
     train_df["label"] = y_train.values
-    train_df["label_name"] = train_df["label"].map({0: "normal", 1: "fall"})
+    train_df["label_name"] = train_df["label"].map({
+        0: "normal",
+        1: "fall",
+    })
 
     test_df = X_test.copy()
     test_df["label"] = y_test.values
-    test_df["label_name"] = test_df["label"].map({0: "normal", 1: "fall"})
+    test_df["label_name"] = test_df["label"].map({
+        0: "normal",
+        1: "fall",
+    })
 
     train_df.to_csv(TRAIN_FEATURE_FILE, index=False, encoding="utf-8-sig")
     test_df.to_csv(TEST_FEATURE_FILE, index=False, encoding="utf-8-sig")
@@ -164,114 +186,46 @@ def save_train_test_csv(X_train, X_test, y_train, y_test):
     print(f"Test feature file saved: {TEST_FEATURE_FILE}")
 
 
-def train_with_history(X_train, y_train, X_test, y_test):
-    """
-    RandomForest không có epoch và loss như neural network.
-    Vì vậy ta train nhiều lần với số cây tăng dần để lấy accuracy/loss theo n_estimators.
-    """
+def create_models():
+    models = {
+        "Random Forest": RandomForestClassifier(
+    n_estimators=1000,
+    max_depth=10,
+    min_samples_leaf=5,
+    min_samples_split=10,
+    max_features="sqrt",
+    class_weight={0: 1, 1: 0.7},
+    bootstrap=True,
+    oob_score=True,
+    n_jobs=-1,
+    random_state=RANDOM_STATE,
+),
+       "Gradient Boosting": GradientBoostingClassifier(
+    n_estimators=200,
+    learning_rate=0.01,
+    max_depth=3,
+    min_samples_leaf=5,
+    min_samples_split=10,
+    subsample=0.8,
+    random_state=RANDOM_STATE,
+)
+    }
 
-    tree_steps = [50, 100, 200, 500, 1000, 1500, 2000]
-
-    history = []
-
-    for n_tree in tree_steps:
-        model = create_model(n_estimators=n_tree)
-        model.fit(X_train, y_train)
-
-        train_pred = model.predict(X_train)
-        test_pred = model.predict(X_test)
-
-        train_proba = model.predict_proba(X_train)
-        test_proba = model.predict_proba(X_test)
-
-        train_acc = accuracy_score(y_train, train_pred)
-        test_acc = accuracy_score(y_test, test_pred)
-
-        train_loss = log_loss(y_train, train_proba, labels=[0, 1])
-        test_loss = log_loss(y_test, test_proba, labels=[0, 1])
-
-        history.append({
-            "n_estimators": n_tree,
-            "train_accuracy": train_acc,
-            "test_accuracy": test_acc,
-            "train_loss": train_loss,
-            "test_loss": test_loss,
-        })
-
-        print(
-            f"Trees: {n_tree:4d} | "
-            f"Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f} | "
-            f"Train Loss: {train_loss:.4f} | Test Loss: {test_loss:.4f}"
-        )
-
-    history_df = pd.DataFrame(history)
-    history_df.to_csv(METRICS_FILE, index=False, encoding="utf-8-sig")
-
-    return history_df
+    return models
 
 
-def plot_accuracy(history_df):
-    plt.figure(figsize=(8, 5))
+def predict_with_threshold(model, X_test, threshold=0.5):
+    if hasattr(model, "predict_proba"):
+        proba = model.predict_proba(X_test)
+        fall_proba = proba[:, 1]
+        pred = (fall_proba >= threshold).astype(int)
+        return pred, proba
 
-    plt.plot(
-        history_df["n_estimators"],
-        history_df["train_accuracy"],
-        marker="o",
-        label="Train Accuracy",
-    )
-
-    plt.plot(
-        history_df["n_estimators"],
-        history_df["test_accuracy"],
-        marker="o",
-        label="Test Accuracy",
-    )
-
-    plt.title("Accuracy theo số lượng cây Random Forest")
-    plt.xlabel("Số lượng cây")
-    plt.ylabel("Accuracy")
-    plt.ylim(0, 1.05)
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-
-    plt.savefig(ACCURACY_CHART_FILE, dpi=300)
-    plt.close()
-
-    print(f"Accuracy chart saved: {ACCURACY_CHART_FILE}")
+    pred = model.predict(X_test)
+    return pred, None
 
 
-def plot_loss(history_df):
-    plt.figure(figsize=(8, 5))
-
-    plt.plot(
-        history_df["n_estimators"],
-        history_df["train_loss"],
-        marker="o",
-        label="Train Loss",
-    )
-
-    plt.plot(
-        history_df["n_estimators"],
-        history_df["test_loss"],
-        marker="o",
-        label="Test Loss",
-    )
-
-    plt.title("Log Loss theo số lượng cây Random Forest")
-    plt.xlabel("Số lượng cây")
-    plt.ylabel("Log Loss")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-
-    plt.savefig(LOSS_CHART_FILE, dpi=300)
-    plt.close()
-
-    print(f"Loss chart saved: {LOSS_CHART_FILE}")
-
-
-def plot_confusion_matrix(y_test, pred):
+def save_confusion_matrix(name, y_test, pred):
     cm = confusion_matrix(y_test, pred)
 
     disp = ConfusionMatrixDisplay(
@@ -282,38 +236,71 @@ def plot_confusion_matrix(y_test, pred):
     fig, ax = plt.subplots(figsize=(6, 5))
     disp.plot(ax=ax, values_format="d")
 
-    plt.title("Confusion Matrix")
+    plt.title(f"Confusion Matrix - {name}")
     plt.tight_layout()
-    plt.savefig(CONFUSION_MATRIX_FILE, dpi=300)
+
+    file_name = f"confusion_matrix_{name.replace(' ', '_').lower()}.png"
+    cm_file = CURRENT_DIR / file_name
+
+    plt.savefig(cm_file, dpi=300)
     plt.close()
 
-    print(f"Confusion matrix image saved: {CONFUSION_MATRIX_FILE}")
+    return cm_file
 
 
-def save_classification_report(y_test, pred):
-    report_dict = classification_report(
-        y_test,
-        pred,
-        target_names=["normal", "fall"],
-        output_dict=True,
+def evaluate_model(name, model, X_train, X_test, y_train, y_test):
+    print("\n" + "=" * 60)
+    print(name)
+
+    model.fit(X_train, y_train)
+
+    pred, proba = predict_with_threshold(
+        model,
+        X_test,
+        threshold=FALL_THRESHOLD,
     )
 
-    report_df = pd.DataFrame(report_dict).transpose()
-    report_df.to_csv(REPORT_FILE, encoding="utf-8-sig")
-
-    print(f"Classification report saved: {REPORT_FILE}")
-
-
-def evaluate_model(y_test, pred):
     acc = accuracy_score(y_test, pred)
-    cm = confusion_matrix(y_test, pred)
 
-    print("\nAccuracy:", acc)
+    precision_fall = precision_score(
+        y_test,
+        pred,
+        pos_label=1,
+        zero_division=0,
+    )
+
+    recall_fall = recall_score(
+        y_test,
+        pred,
+        pos_label=1,
+        zero_division=0,
+    )
+
+    f1_fall = f1_score(
+        y_test,
+        pred,
+        pos_label=1,
+        zero_division=0,
+    )
+
+    cm = confusion_matrix(y_test, pred)
+    tn, fp, fn, tp = cm.ravel()
+
+    loss_value = None
+
+    if proba is not None:
+        loss_value = log_loss(y_test, proba, labels=[0, 1])
+
+    print(f"Accuracy       : {acc:.4f}")
+    print(f"Precision fall : {precision_fall:.4f}")
+    print(f"Recall fall    : {recall_fall:.4f}")
+    print(f"F1 fall        : {f1_fall:.4f}")
+
+    if loss_value is not None:
+        print(f"Log Loss       : {loss_value:.4f}")
 
     print("\nConfusion Matrix:")
     print(cm)
-
-    tn, fp, fn, tp = cm.ravel()
 
     print("\nConfusion Matrix Explain:")
     print(f"Normal đoán đúng: {tn}")
@@ -322,35 +309,88 @@ def evaluate_model(y_test, pred):
     print(f"Fall đoán đúng: {tp}")
 
     print("\nClassification Report:")
-    print(
-        classification_report(
-            y_test,
-            pred,
-            target_names=["normal", "fall"],
-        )
-    )
+    print(classification_report(
+        y_test,
+        pred,
+        target_names=["normal", "fall"],
+        zero_division=0,
+    ))
+
+    cm_file = save_confusion_matrix(name, y_test, pred)
+
+    model_file = CURRENT_DIR / f"{name.replace(' ', '_').lower()}_model.pkl"
+    joblib.dump(model, model_file)
+
+    return {
+        "model": name,
+        "accuracy": acc,
+        "precision_fall": precision_fall,
+        "recall_fall": recall_fall,
+        "f1_fall": f1_fall,
+        "log_loss": loss_value,
+        "tn_normal_correct": tn,
+        "fp_normal_as_fall": fp,
+        "fn_fall_missed": fn,
+        "tp_fall_correct": tp,
+        "model_file": str(model_file),
+        "confusion_matrix_file": str(cm_file),
+    }
+
+
+def plot_compare_chart(results_df):
+    metrics = [
+        "accuracy",
+        "precision_fall",
+        "recall_fall",
+        "f1_fall",
+    ]
+
+    for metric in metrics:
+        plt.figure(figsize=(9, 5))
+        plt.bar(results_df["model"], results_df[metric])
+        plt.ylim(0, 1.05)
+        plt.title(f"Compare {metric}")
+        plt.xlabel("Model")
+        plt.ylabel(metric)
+        plt.xticks(rotation=20)
+        plt.tight_layout()
+
+        chart_file = CURRENT_DIR / f"compare_{metric}.png"
+        plt.savefig(chart_file, dpi=300)
+        plt.close()
+
+        print(f"Chart saved: {chart_file}")
+
+
+def train_deploy_model(best_model_name, best_model, final_feature_df, final_label_series):
+    print("\nTraining deploy model with all data...")
+    print(f"Best model: {best_model_name}")
+
+    best_model.fit(final_feature_df, final_label_series)
+
+    joblib.dump(best_model, MODEL_FILE)
+    joblib.dump(best_model, SERVER_MODEL_FILE)
+
+    print("\nDeploy model saved:")
+    print(f"Model saved: {MODEL_FILE}")
+    print(f"Server model saved: {SERVER_MODEL_FILE}")
 
 
 def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    fall_df = build_feature_frame(FALL_DIR, "fall", 1)
-    normal_df = build_feature_frame(NORMAL_DIR, "normal", 0)
-
-    data_df = pd.concat([fall_df, normal_df], ignore_index=True)
-
-    if data_df.empty:
-        raise ValueError("No training data found in dataset/split.")
+    data_df = build_dataset_from_split()
 
     print("\nDataset:")
-    print(data_df["label"].value_counts().rename({0: "normal", 1: "fall"}))
+    print(data_df["label"].value_counts().rename({
+        0: "normal",
+        1: "fall",
+    }))
     print(f"Total samples: {len(data_df)}")
 
-    # 1. Xuất feature ra file CSV trước khi train
     save_feature_csv(data_df)
 
     feature_df = data_df.drop(
-        columns=["label", "source_file"]
+        columns=["label", "source_file"],
+        errors="ignore",
     ).fillna(0)
 
     label_series = data_df["label"]
@@ -365,70 +405,79 @@ def main():
 
     print("\nTrain/Test:")
     print(f"Train samples: {len(X_train)}")
-    print(f"Test samples: {len(X_test)}")
+    print(f"Test samples : {len(X_test)}")
 
-    # 2. Xuất train/test feature
     save_train_test_csv(X_train, X_test, y_train, y_test)
 
-    # 3. Train nhiều lần để lấy history accuracy/loss
-    print("\nTraining history for chart...")
-    history_df = train_with_history(X_train, y_train, X_test, y_test)
+    models = create_models()
 
-    # 4. Vẽ accuracy và loss
-    plot_accuracy(history_df)
-    plot_loss(history_df)
+    results = []
 
-    # 5. Train model chính
-    print("\nTraining final evaluation model...")
+    for name, model in models.items():
+        result = evaluate_model(
+            name,
+            model,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
 
-    model = create_model(n_estimators=2000)
-    model.fit(X_train, y_train)
+        results.append(result)
 
-    fall_threshold = 0.4
+    results_df = pd.DataFrame(results)
+    results_df.to_csv(RESULT_FILE, index=False, encoding="utf-8-sig")
 
-    proba = model.predict_proba(X_test)
-    fall_proba = proba[:, 1]
+    print("\n" + "=" * 60)
+    print("MODEL COMPARISON")
 
-    pred = (fall_proba >= fall_threshold).astype(int)
+    print(results_df[
+        [
+            "model",
+            "accuracy",
+            "precision_fall",
+            "recall_fall",
+            "f1_fall",
+            "fp_normal_as_fall",
+            "fn_fall_missed",
+        ]
+    ])
 
-    print("\nEvaluation Result:")
-    evaluate_model(y_test, pred)
+    print(f"\nComparison file saved: {RESULT_FILE}")
 
-    # 6. Lưu classification report và confusion matrix
-    save_classification_report(y_test, pred)
-    plot_confusion_matrix(y_test, pred)
+    plot_compare_chart(results_df)
 
-    # 7. Train lại bằng toàn bộ dataset để deploy
-    print("\nTraining deploy model with all data...")
+    best_row = results_df.sort_values(
+        by=["f1_fall", "recall_fall", "accuracy"],
+        ascending=False,
+    ).iloc[0]
+
+    best_model_name = best_row["model"]
+    best_model = models[best_model_name]
+
+    print("\nBest model:")
+    print(best_model_name)
 
     final_feature_df = data_df.drop(
-        columns=["label", "source_file"]
+        columns=["label", "source_file"],
+        errors="ignore",
     ).fillna(0)
 
     final_label_series = data_df["label"]
 
-    final_model = create_model(n_estimators=2000)
-    final_model.fit(final_feature_df, final_label_series)
-
-    MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SERVER_MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-    joblib.dump(final_model, MODEL_FILE)
-    joblib.dump(final_model, SERVER_MODEL_FILE)
-
-    print("\nModel saved:")
-    print(f"Model saved: {MODEL_FILE}")
-    print(f"Server model saved: {SERVER_MODEL_FILE}")
+    train_deploy_model(
+        best_model_name,
+        best_model,
+        final_feature_df,
+        final_label_series,
+    )
 
     print("\nOutput files:")
     print(f"Feature CSV: {FEATURE_FILE}")
     print(f"Train Feature CSV: {TRAIN_FEATURE_FILE}")
     print(f"Test Feature CSV: {TEST_FEATURE_FILE}")
-    print(f"Metrics CSV: {METRICS_FILE}")
-    print(f"Classification Report CSV: {REPORT_FILE}")
-    print(f"Accuracy Chart: {ACCURACY_CHART_FILE}")
-    print(f"Loss Chart: {LOSS_CHART_FILE}")
-    print(f"Confusion Matrix: {CONFUSION_MATRIX_FILE}")
+    print(f"Comparison CSV: {RESULT_FILE}")
+    print(f"Deploy Model: {MODEL_FILE}")
 
 
 if __name__ == "__main__":
