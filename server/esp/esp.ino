@@ -9,6 +9,7 @@ const char* mqtt_server = "broker.hivemq.com";
 const int mqtt_port = 1883;
 const char* device_code = "FD-001";
 const char* mqtt_data_topic = "esp32/fall_detection/data";
+
 String mqtt_control_topic = String("esp32/fall_detection/") + device_code + "/control";
 String mqtt_buzzer_topic = String("esp32/fall_detection/") + device_code + "/buzzer";
 
@@ -18,46 +19,78 @@ PubSubClient client(espClient);
 // ===== MPU =====
 MPU6050 mpu6050(Wire);
 WiFiManager wm;
+
 const int i2cSdaPin = 4;
 const int i2cSclPin = 5;
 
 // ===== timing =====
 unsigned long lastSend = 0;
 const int sendInterval = 200;
+
 // ===== device state =====
-bool deviceOn = true;  // default on
+bool deviceOn = true;
 
 // ===== buzzer =====
-const int buzzerPin = 6;
+const int buzzerPin = 0;
 bool buzzerOn = false;
-unsigned long buzzerOffAt = 0;
 
-void startBuzzer(unsigned long durationMs) {
+// ===== button =====
+const int buttonPin = 1;
+bool lastButtonState = HIGH;
+unsigned long lastButtonPressTime = 0;
+const unsigned long debounceDelay = 250;
+
+// ===== buzzer control =====
+void startBuzzer() {
   digitalWrite(buzzerPin, HIGH);
   buzzerOn = true;
-  buzzerOffAt = millis() + durationMs;
-  Serial.print("Buzzer ON for ");
-  Serial.print(durationMs);
-  Serial.println("ms");
+
+  Serial.println("Buzzer ON - waiting for button press to stop");
 }
 
-void updateBuzzer() {
-  if (buzzerOn && millis() >= buzzerOffAt) {
-    digitalWrite(buzzerPin, LOW);
-    buzzerOn = false;
-    Serial.println("Buzzer OFF");
+void stopBuzzer() {
+  digitalWrite(buzzerPin, LOW);
+  buzzerOn = false;
+
+  Serial.println("Buzzer OFF by button");
+}
+
+void updateButton() {
+  bool currentButtonState = digitalRead(buttonPin);
+
+  // Nút dùng INPUT_PULLUP: bấm là LOW
+  if (lastButtonState == HIGH && currentButtonState == LOW) {
+    if (millis() - lastButtonPressTime > debounceDelay) {
+      lastButtonPressTime = millis();
+
+      if (buzzerOn) {
+        stopBuzzer();
+      }
+    }
   }
+
+  lastButtonState = currentButtonState;
 }
 
 // ===== reconnect MQTT =====
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Connecting MQTT...");
-    
-    if (client.connect("ESP32_Client")) {
+
+    String clientId = String("ESP32_Client_") + device_code;
+
+    if (client.connect(clientId.c_str())) {
       Serial.println("connected");
+
       client.subscribe(mqtt_control_topic.c_str());
       client.subscribe(mqtt_buzzer_topic.c_str());
+
+      Serial.print("Subscribed control topic: ");
+      Serial.println(mqtt_control_topic);
+
+      Serial.print("Subscribed buzzer topic: ");
+      Serial.println(mqtt_buzzer_topic);
+
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -66,46 +99,55 @@ void reconnect() {
     }
   }
 }
+
 // ===== callback for MQTT messages =====
 void callback(char* topic, byte* payload, unsigned int length) {
   String message = "";
+
   for (int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
+
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("]: ");
   Serial.println(message);
 
+  // ===== device on/off =====
   if (String(topic) == mqtt_control_topic) {
     if (message == "on") {
       deviceOn = true;
       Serial.println("Device turned ON");
-    } else if (message == "off") {
+    } 
+    else if (message == "off") {
       deviceOn = false;
       Serial.println("Device turned OFF");
     }
   }
 
+  // ===== buzzer command =====
   if (String(topic) == mqtt_buzzer_topic) {
     int separatorIndex = message.indexOf(',');
     String command = separatorIndex >= 0 ? message.substring(0, separatorIndex) : message;
-    unsigned long durationMs = separatorIndex >= 0
-        ? message.substring(separatorIndex + 1).toInt()
-        : 2000;
 
     if (command == "beep") {
-      if (durationMs == 0) {
-        durationMs = 2000;
-      }
-      startBuzzer(durationMs);
+      startBuzzer();
+    } 
+    else if (command == "stop") {
+      stopBuzzer();
     }
   }
 }
+
 void setup() {
   Serial.begin(115200);
+
+  // ===== buzzer =====
   pinMode(buzzerPin, OUTPUT);
   digitalWrite(buzzerPin, LOW);
+
+  // ===== button =====
+  pinMode(buttonPin, INPUT_PULLUP);
 
   // ===== MPU =====
   Wire.begin(i2cSdaPin, i2cSclPin);
@@ -120,6 +162,7 @@ void setup() {
 
   Serial.println("WiFi connected");
   Serial.println(WiFi.localIP());
+
   Serial.print("Device code: ");
   Serial.println(device_code);
 
@@ -127,7 +170,7 @@ void setup() {
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 
-  WiFi.setSleep(false); // 🔥 giảm mất WiFi
+  WiFi.setSleep(false);
 }
 
 void loop() {
@@ -135,8 +178,11 @@ void loop() {
   if (!client.connected()) {
     reconnect();
   }
+
   client.loop();
-  updateBuzzer();
+
+  // ===== check button =====
+  updateButton();
 
   // ===== gửi dữ liệu =====
   if (deviceOn && millis() - lastSend > sendInterval) {
@@ -152,14 +198,12 @@ void loop() {
     float gy = mpu6050.getGyroY();
     float gz = mpu6050.getGyroZ();
 
-    float A = sqrt(ax*ax + ay*ay + az*az);
+    float A = sqrt(ax * ax + ay * ay + az * az);
 
-    // 🔥 dùng char thay vì String (tránh crash)
     char data[120];
     sprintf(data, "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
             device_code, ax, ay, az, gx, gy, gz, A);
 
-    // ===== publish =====
     client.publish(mqtt_data_topic, data);
 
     Serial.println(data);
