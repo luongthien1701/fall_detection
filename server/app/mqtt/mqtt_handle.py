@@ -1,6 +1,10 @@
+from zoneinfo import ZoneInfo
+
 import paho.mqtt.client as mqtt
 import pandas as pd
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.core import state
 from app.config import (
@@ -152,8 +156,10 @@ def handler(data):
                                 f"device_code={device_code}, success={sent}"
                             )
 
+                        vn_time = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+
                         db.add(FallEvent(
-                            time=time.ctime(),
+                            time=vn_time.strftime("%Y-%m-%d %H:%M:%S"),
                             total_a=row[6],
                             device_code=device_code,
                         ))

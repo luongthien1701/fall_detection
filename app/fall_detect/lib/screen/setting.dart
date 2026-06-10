@@ -54,20 +54,6 @@ class _SettingWidgetState extends State<SettingWidget> {
                       Text("${volume.toInt()}%"),
                     ],
                   ),
-
-                  Slider(
-                    value: volume,
-                    min: 0,
-                    max: 100,
-                    activeColor: Colors.green,
-                    onChanged: (value) async {
-                      setState(() {
-                        volume = value;
-                      });
-                      final prefs = await SharedPreferences.getInstance();
-                      prefs.setDouble('volume', value);
-                    },
-                  ),
                 ],
               ),
             ),
