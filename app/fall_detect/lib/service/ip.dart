@@ -1,3 +1,3 @@
 class Ip {
-  static const String ip = "http://192.168.157.183:8000";
-}
+  static const String ip = "http://20.189.124.16:8000";
+} 

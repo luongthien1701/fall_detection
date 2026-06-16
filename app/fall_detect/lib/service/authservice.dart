@@ -24,8 +24,19 @@ class Authservice {
     return data;
   }
 
+  Future<Map<String, dynamic>> logout(int userId) async {
+    final response = await http.post(
+      Uri.parse('${Ip.ip}/api/auth/logout'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({'user_id': userId}),
+    );
+
+    final data = jsonDecode(response.body);
+
+    return data;
+  }
+
   Future<Map<String, dynamic>> signup(
-    String firstname,
     String email,
     String password,
     String phone,
@@ -35,13 +46,49 @@ class Authservice {
       Uri.parse('${Ip.ip}/api/auth/signup'),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        'firstname': firstname,
         'email': email,
         'password': password,
         'phone': phone,
         'fcm_token': fcmToken,
       }),
     );
+    final data = jsonDecode(response.body);
+
+    return data;
+  }
+
+  Future<Map<String, dynamic>> updateUser(
+    int userId,
+    String phone,
+    String relativePhone1,
+    String relativePhone2,
+  ) async {
+    final response = await http.post(
+      Uri.parse('${Ip.ip}/api/user/update'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        'relative_phone_1': relativePhone1,
+        'relative_phone_2': relativePhone2,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+
+    return data;
+  }
+
+  Future<Map<String, dynamic>> connectDevice(
+    int userId,
+    String deviceCode,
+  ) async {
+    final response = await http.post(
+      Uri.parse('${Ip.ip}/api/device/connect'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"user_id": userId, "device_code": deviceCode}),
+    );
+
     final data = jsonDecode(response.body);
 
     return data;

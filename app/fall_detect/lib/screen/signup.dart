@@ -14,11 +14,9 @@ class _SignupWidgetState extends State<SignupWidget> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
-  @override
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -45,6 +43,7 @@ class _SignupWidgetState extends State<SignupWidget> {
               ),
               Container(
                 width: double.infinity,
+                height: MediaQuery.of(context).size.height - 60,
                 decoration: BoxDecoration(
                   color: const Color.fromARGB(255, 218, 213, 213),
                 ),
@@ -71,17 +70,6 @@ class _SignupWidgetState extends State<SignupWidget> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20.0),
                       child: TextField(
-                        controller: _firstNameController,
-                        decoration: InputDecoration(
-                          labelText: "First Name",
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                      child: TextField(
                         controller: _emailController,
                         decoration: InputDecoration(
                           labelText: "Email",
@@ -94,8 +82,11 @@ class _SignupWidgetState extends State<SignupWidget> {
                       padding: const EdgeInsets.symmetric(horizontal: 20.0),
                       child: TextField(
                         controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        autofillHints: const [AutofillHints.telephoneNumber],
+                        obscureText: false,
                         decoration: InputDecoration(
-                          labelText: "Phone Number",
+                          labelText: "Số điện thoại người dùng app",
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -137,31 +128,34 @@ class _SignupWidgetState extends State<SignupWidget> {
                               ),
                             ),
                       ),
-                      onPressed: () {
+                      onPressed: () async {
                         final fcmtoken = context.read<FcmProvider>().token;
                         final email = _emailController.text;
                         final password = _passwordController.text;
                         final phone = _phoneController.text;
-                        final firstName = _firstNameController.text;
                         if (password != _confirmPasswordController.text) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text("Passwords do not match!")),
                           );
                           return;
                         }
-                        final mess = context.read<AuthProvider>().signup(
-                          firstName,
+                        final mess = await context.read<AuthProvider>().signup(
                           email,
                           password,
                           phone,
                           fcmtoken ?? "",
                         );
 
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(mess.toString())),
+                          SnackBar(content: Text(mess ?? "Sign up failed")),
                         );
+                        if (!context.read<AuthProvider>().isLogin) {
+                          return;
+                        }
                         Future.delayed(Duration(seconds: 1), () {
-                          Navigator.pushNamed(context, '/login');
+                          if (!context.mounted) return;
+                          Navigator.pushReplacementNamed(context, '/hub');
                         });
                       },
                       child: Padding(

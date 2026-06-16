@@ -24,6 +24,7 @@ class _LoginWidgetState extends State<LoginWidget> {
     String? token = await FirebaseMessaging.instance.getToken();
 
     if (token != null) {
+      if (!mounted) return;
       Provider.of<FcmProvider>(context, listen: false).setToken(token);
     }
   }
@@ -92,7 +93,7 @@ class _LoginWidgetState extends State<LoginWidget> {
                               TextField(
                                 controller: _emailController,
                                 decoration: InputDecoration(
-                                  labelText: "Username",
+                                  labelText: "Email",
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(5),
                                   ),
@@ -134,21 +135,31 @@ class _LoginWidgetState extends State<LoginWidget> {
                                         ),
                                       ),
                                 ),
-                                onPressed: () async{
+                                onPressed: () async {
                                   final email = _emailController.text;
                                   final password = _passwordController.text;
-                                  final mess = await  context
+                                  final mess = await context
                                       .read<AuthProvider>()
                                       .login(
                                         email,
                                         password,
                                         context.read<FcmProvider>().token ?? "",
                                       );
+                                  if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(mess.toString())),
+                                    SnackBar(
+                                      content: Text(
+                                        mess ?? "Đăng nhập thành công",
+                                      ),
+                                    ),
                                   );
-                                  if (context.read<AuthProvider>().isLogin) {
-                                    Navigator.pushNamed(context, '/hub');
+                                  final authProvider = context
+                                      .read<AuthProvider>();
+                                  if (authProvider.isLogin) {
+                                    Navigator.pushReplacementNamed(
+                                      context,
+                                      '/hub',
+                                    );
                                   }
                                 },
                                 child: Padding(

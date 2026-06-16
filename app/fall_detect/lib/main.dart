@@ -14,21 +14,34 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   await FirebaseMessaging.instance.requestPermission(
     alert: true,
     badge: true,
     sound: true,
   );
-  FcmService.init(FcmService.navigatorKey);
+
+  final authProvider = AuthProvider();
+  await authProvider.restoreSession();
+  final fcmProvider = FcmProvider();
+  final fcmToken = await FirebaseMessaging.instance.getToken();
+  if (fcmToken != null) {
+    fcmProvider.setToken(fcmToken);
+  }
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => FcmProvider()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider.value(value: fcmProvider),
+        ChangeNotifierProvider.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => DeviceProvider()),
         ChangeNotifierProxyProvider<DeviceProvider, MqttProvider>(
           create: (_) => MqttProvider(),
@@ -41,6 +54,14 @@ void main() async {
       child: const MyApp(),
     ),
   );
+
+  await FcmService.init(
+    FcmService.navigatorKey,
+    canHandleAlert: () => authProvider.isLogin,
+  );
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    FcmService.openPendingRoute();
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -50,7 +71,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: FcmService.navigatorKey,
       debugShowCheckedModeBanner: false,
-      initialRoute: '/login',
+      initialRoute: context.read<AuthProvider>().isLogin ? '/hub' : '/login',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),

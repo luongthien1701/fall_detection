@@ -6,9 +6,11 @@ import 'package:fall_detect/service/ip.dart';
 import 'package:http/http.dart' as http;
 
 class DeviceService {
-  Future<Device> getStatusDevice() async {
+  Future<Device> getStatusDevice(String deviceCode) async {
     final response = await http.get(
-      Uri.parse('${Ip.ip}/status'),
+      Uri.parse(
+        '${Ip.ip}/status',
+      ).replace(queryParameters: {'device_code': deviceCode}),
     );
     if (response.statusCode == 200) {
       return Device.fromJson(json.decode(response.body));
@@ -16,9 +18,12 @@ class DeviceService {
       throw Exception('Failed to fetch device status');
     }
   }
-  Future<List<History>> getHistoryDevice() async {
+
+  Future<List<History>> getHistoryDevice(String deviceCode) async {
     final response = await http.get(
-      Uri.parse('${Ip.ip}/history'),
+      Uri.parse(
+        '${Ip.ip}/history',
+      ).replace(queryParameters: {'device_code': deviceCode}),
     );
     if (response.statusCode == 200) {
       return (json.decode(response.body) as List)
@@ -26,6 +31,28 @@ class DeviceService {
           .toList();
     } else {
       throw Exception('Failed to fetch device history');
+    }
+  }
+
+  Future<bool> controlDevice(String command, String deviceCode) async {
+    final uri = Uri.parse('${Ip.ip}/control');
+    final body = json.encode({'command': command, 'device_code': deviceCode});
+    print('CONTROL API request url=$uri body=$body');
+
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: body,
+    );
+    print(
+      'CONTROL API response status=${response.statusCode} body=${response.body}',
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['success'] ?? false;
+    } else {
+      throw Exception('Failed to control device');
     }
   }
 }

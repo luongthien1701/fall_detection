@@ -1,9 +1,11 @@
 import 'package:fall_detect/provider/device_provider.dart';
+import 'package:fall_detect/service/fcm_service.dart';
 import 'package:fall_detect/service/mqtt_service.dart';
 import 'package:flutter/material.dart';
 
 class MqttProvider extends ChangeNotifier {
   final MqttService _service = MqttService();
+  final Set<String> _subscribedTopics = {};
 
   DeviceProvider? _deviceProvider;
 
@@ -14,20 +16,61 @@ class MqttProvider extends ChangeNotifier {
   bool isConnected = false;
 
   Future<void> init() async {
+    if (isConnected && _service.isConnected) {
+      return;
+    }
+
+    _subscribedTopics.clear();
     await _service.connect();
     isConnected = true;
     notifyListeners();
   }
 
   void subscribe(String topic) {
+    if (_subscribedTopics.contains(topic)) {
+      return;
+    }
+    _subscribedTopics.add(topic);
     _service.subscribe(topic);
+    print("MQTT subscribed: $topic");
 
     _service.listen(topic).listen((msg) async {
-      if (topic.contains("esp32/device/status" )) {
-        print("Received MQTT message: $msg");
-        await _deviceProvider?.getStatus();
+      print("MQTT received: topic=$topic msg=$msg");
+
+      if (topic.contains("esp32/fall_detection/status")) {
+        if (_isCurrentDeviceMessage(msg)) {
+          await _deviceProvider?.getStatus();
+        }
+      }
+
+      if (topic.contains("esp32/fall_detection/events")) {
+        if (_isCurrentDeviceMessage(msg)) {
+          await _deviceProvider?.getHistory();
+          if (_isFallDetectedMessage(msg)) {
+            FcmService.openHazardous();
+          }
+        }
       }
     });
+  }
+
+  bool _isCurrentDeviceMessage(String msg) {
+    final deviceCode = _deviceProvider?.deviceCode;
+    if (deviceCode == null || deviceCode.isEmpty) {
+      return false;
+    }
+
+    final messageDeviceCode = msg.split(',').first.trim();
+    return messageDeviceCode == deviceCode;
+  }
+
+  bool _isFallDetectedMessage(String msg) {
+    final parts = msg.split(',');
+    if (parts.length < 2) {
+      return false;
+    }
+
+    return parts[1].trim() == "fall_detected";
   }
 
   void publish(String topic, String msg) {

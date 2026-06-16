@@ -3,8 +3,9 @@ uvicorn
 websockets
 pandas
 joblib
-scikit-learn
+scikit-learn==1.7.2
 sqlalchemy
 passlib[bcrypt]
 requests
 google-auth
+paho-mqtt
